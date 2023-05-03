@@ -51,14 +51,14 @@ cs = digitalio.DigitalInOut(board.D5)
 max31855 = adafruit_max31855.MAX31855(spi, cs)
 
 rm = pyvisa.ResourceManager()
-#print(rm.list_resources())
-#fuente = rm.open_resource(rm.list_resources()[0])
-#fuente.write_termination = '\n'
-#fuente.read_termination = '\n'
-#fuente.baud_rate = 9600
+print(rm.list_resources())
+fuente = rm.open_resource(rm.list_resources()[0])
+fuente.write_termination = '\n'
+fuente.read_termination = '\n'
+fuente.baud_rate = 9600
 
 # # Alternativa al no tener un comando 'query' para 
-#fuente.query("*IDN?")
+print(fuente.query("*IDN?"))
 # time.sleep(0.1) 
 # id = fuente.read()
 # print(id) #Imprime la identificación del recurso
