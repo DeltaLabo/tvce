@@ -3,7 +3,7 @@
 # Instituto Tecnológico de Costa Rica
 
 import pyvisa
-import controller2
+import DP711
 import time
 from time import sleep
 import threading
@@ -21,6 +21,8 @@ timer_flag = 0
 past_time = datetime.now()
 seconds = 0
 temp = 0
+control = False
+cont_temp = 0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
 
 
@@ -34,35 +36,72 @@ GPIO.output(18, GPIO.LOW)
 GPIO.output(19, GPIO.LOW)
 GPIO.output(20, GPIO.LOW)
 GPIO.output(21, GPIO.LOW)
-# GPIO.output(18,GPIO.LOW)
-# GPIO.setup(24, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) #Change of State Button
-# GPIO.setup(22, GPIO.IN, pull_up_down=GPIO.PUD_DOWN) #Shutdown Button
-
-print("Calentar (c) o efriar (e)?")
-oper = input()
-if oper == "c":
-    GPIO.output(18, GPIO.HIGH)
-else:
-    GPIO.output(18, GPIO.LOW)
-
 
 spi = board.SPI()
 cs = digitalio.DigitalInOut(board.D5)
 max31855 = adafruit_max31855.MAX31855(spi, cs)
 
+#To show connected sources
+
 rm = pyvisa.ResourceManager()
 print(rm.list_resources())
-fuente = rm.open_resource(rm.list_resources()[0])
-fuente.write_termination = '\n'
-fuente.read_termination = '\n'
-fuente.baud_rate = 9600
 
-# # Alternativa al no tener un comando 'query' para 
-print(fuente.query("*IDN?"))
-# time.sleep(0.1) 
-# id = fuente.read()
-# print(id) #Imprime la identificación del recurso
-# time.sleep(0.2)
+#Configure the sources
+
+fuente1 = rm.open_resource(rm.list_resources()[0])
+fuente1.write_termination = '\n'
+fuente1.read_termination = '\n'
+fuente1.baud_rate = 9600
+Fuente1 = DP711.Fuente(fuente1, "DP711.1")
+
+fuente2 = rm.open_resource(rm.list_resources()[1])
+fuente2.write_termination = '\n'
+fuente2.read_termination = '\n'
+fuente2.baud_rate = 9600
+Fuente2 = DP711.Fuente(fuente2, "DP711.2")
+
+
+print("Calentar (c) o efriar (e)?")
+oper = input()
+if oper == "c":
+    GPIO.output(18, GPIO.HIGH)
+elif oper == "e":
+    GPIO.output(18, GPIO.LOW)
+else:
+    print("Error")
+
+oper = ""
+
+print("Controlar (c) o usar corriente fija (f)?")
+oper = input()
+if oper == "c":
+    control = True
+    print("Temperatura en ºC:")
+    cont_temp = input()    
+elif oper == "f":
+    control = False
+    print("Corriente en A:")
+    cont_curr = input()
+    if float(cont_curr) > 5:
+        cont_curr = 5
+    print(Fuente1.aplicar_voltaje_corriente(30,cont_curr))
+    print(Fuente2.aplicar_voltaje_corriente(30,cont_curr))
+else:
+    print("Error")
+    
+oper = ""
+
+# Identity of source
+print(fuente1.query("*IDN?"))
+print(fuente2.query("*IDN?"))
+
+# 
+Fuente1.encender_canal(1)
+Fuente2.encender_canal(1)
+
+
+
+
 
 #Interrupt Service Routine
 #Executed in response to an event such as a time trigger or a voltage change on a pin
@@ -160,6 +199,16 @@ while True:
         print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 = "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
 
         past_time = tiempo_actual
+        
+        if control == True:
+            err = (float(cont_temp) - tavg_num)/float(cont_temp)
+            if err > 0:
+                Fuente1.aplicar_voltaje_corriente(30,err*5)
+                Fuente2.aplicar_voltaje_corriente(30,err*5)
+            else:
+                Fuente1.aplicar_voltaje_corriente(30,0.1)
+                Fuente2.aplicar_voltaje_corriente(30,0.1)
+            
 
 
 
