@@ -32,6 +32,7 @@ GPIO.setup(18,GPIO.OUT) #Pin #18 RPi
 GPIO.setup(19,GPIO.OUT) #Pin #19 RPi
 GPIO.setup(20,GPIO.OUT) #Pin #20 RPi
 GPIO.setup(21,GPIO.OUT) #Pin #21 RPi
+
 GPIO.output(18, GPIO.LOW)
 GPIO.output(19, GPIO.LOW)
 GPIO.output(20, GPIO.LOW)
@@ -61,7 +62,7 @@ fuente2.baud_rate = 9600
 Fuente2 = DP711.Fuente(fuente2, "DP711.2")
 
 
-print("Calentar (c) o efriar (e)?")
+print("Calentar (c) o enfriar (e)?")
 oper = input()
 if oper == "c":
     GPIO.output(18, GPIO.HIGH)
@@ -201,10 +202,12 @@ while True:
         past_time = tiempo_actual
         
         if control == True:
-            err = (float(cont_temp) - tavg_num)/float(cont_temp)
+            err = abs((float(cont_temp) - tavg_num)/10)
+            if err > 1:
+                err = 1
             if err > 0:
-                Fuente1.aplicar_voltaje_corriente(30,err*5)
-                Fuente2.aplicar_voltaje_corriente(30,err*5)
+                Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
+                Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
             else:
                 Fuente1.aplicar_voltaje_corriente(30,0.1)
                 Fuente2.aplicar_voltaje_corriente(30,0.1)

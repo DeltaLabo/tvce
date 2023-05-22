@@ -25,41 +25,41 @@ class Fuente:
 
     # turn on channel
     def encender_canal(self, channel: int):
-        self.instrument.write("OUTP:STAT CH{:n},ON".format(channel))
-        time.sleep(0.05)
+        self.instrument.write(":OUTP:STAT CH{:n},ON".format(channel))
+        time.sleep(0.1)
         return "ON"
 
     # turn off channel
     def apagar_canal(self, channel: int):
-        self.instrument.write("OUTP:STAT CH{:n},OFF".format(channel))
+        self.instrument.write(":OUTP:STAT CH{:n},OFF".format(channel))
         time.sleep(0.05)
         return "OFF"
 
 
     # apply voltage & current
     def aplicar_voltaje_corriente(self, voltaje: float, corriente: float):
-        self.instrument.write("SOUR:VOLT {}".format(voltaje))
-        time.sleep(0.05)
-        self.instrument.write("SOUR:CURR {}".format(corriente))
-        time.sleep(0.05)
-        self.instrument.write("SOUR:VOLT?")
-        time.sleep(0.05)
-        voltMeas = self.instrument.read()
-        time.sleep(0.05)
-        self.instrument.write("SOUR:CURR?")
-        time.sleep(0.05)
-        currMeas = self.instrument.read()
-        time.sleep(0.05)
-        return "CH1:30V/5A," + voltMeas + "," + currMeas
+        self.instrument.write(":VOLT {}".format(voltaje))
+        time.sleep(0.1)
+        self.instrument.write(":CURR {}".format(corriente))
+        time.sleep(0.1)
+#        self.instrument.write("SOUR:VOLT?")
+#        time.sleep(0.05)
+#        voltMeas = self.instrument.read()
+#        time.sleep(0.05)
+#        self.instrument.write("SOUR:CURR?")
+#        time.sleep(0.05)
+#        currMeas = self.instrument.read()
+#        time.sleep(0.05)
+        return True #"CH1:30V/5A," + voltMeas + "," + currMeas
 
     # measure everything (in order returns: voltage, current and power)
     def medir_todo(self, channel: int):
         if self.delay_enable:
-            self.instrument.write("MEAS:VOLT? CH1")
+            self.instrument.write(":MEAS:VOLT? CH1")
             time.sleep(0.05)
             voltaje = float(self.instrument.read())
             time.sleep(0.05)
-            self.instrument.write("MEAS:CURR? CH1")
+            self.instrument.write(":MEAS:CURR? CH1")
             time.sleep(0.05)
             corriente = float(self.instrument.read())
             time.sleep(0.05)
@@ -75,16 +75,3 @@ class Fuente:
             corriente = medicion[1]
             #potencia = medicion[2]
             return float(voltaje), float(corriente)#, float(potencia)
-
-    def toggle_4w(self):
-        if self.delay_enable:
-            if self.modo == "2W":
-                self.modo = "4W"
-                self.instrument.write("MODE:SET {}".format(self.modo))
-                time.sleep(0.5)
-                return "4W"
-            elif self.modo == "4W":
-                self.modo = "2W"
-                self.instrument.write("MODE:SET {}".format(self.modo))
-                time.sleep(0.5)
-                return "2W"
