@@ -62,23 +62,23 @@ fuente2.baud_rate = 9600
 Fuente2 = DP711.Fuente(fuente2, "DP711.2")
 
 
-print("Calentar (c) o enfriar (e)?")
-oper = input()
-if oper == "c":
-    GPIO.output(18, GPIO.HIGH)
-elif oper == "e":
-    GPIO.output(18, GPIO.LOW)
-else:
-    print("Error")
+#print("Calentar (c) o enfriar (e)?")
+#oper = input()
+#if oper == "c":
+#    GPIO.output(18, GPIO.HIGH)
+#elif oper == "e":
+#    GPIO.output(18, GPIO.LOW)
+#else:
+#    print("Error")
 
-oper = ""
+#oper = ""
 
 print("Controlar (c) o usar corriente fija (f)?")
 oper = input()
 if oper == "c":
     control = True
     print("Temperatura en ºC:")
-    cont_temp = input()    
+    cont_temp = input()  
 elif oper == "f":
     control = False
     print("Corriente en A:")
@@ -163,31 +163,50 @@ t4_data = []
 tavg_data = []
 tref_data = []
 
+from simple_pid import PID
+
+pid = PID(0.5, 0.01, 0.5, setpoint = float(cont_temp))
+pid.output_limits = (0,1)
+
 
 while True:
-    time_num = seconds
-    time_text = "{:05.2f}".format(time_num)
-    time_data.append(time_num)
-    t1_num = measure_temp(0)
-    t1_text = "{:05.2f}".format(t1_num)
-    t1_data.append(t1_num)
-    t2_num = measure_temp(2)
-    t2_text = "{:05.2f}".format(t2_num)
-    t2_data.append(t2_num)
-    t3_num = measure_temp(5)
-    t3_text = "{:05.2f}".format(t3_num)
-    t3_data.append(t3_num)
-    t4_num = measure_temp(7)
-    t4_text = "{:05.2f}".format(t4_num)
-    t4_data.append(t4_num)
-    tavg_num = (t1_num+t2_num+t3_num+t4_num)/4
-    tavg_text = "{:05.2f}".format(tavg_num)
-    tavg_data.append(tavg_num)
-    tref_num = max31855.reference_temperature
-    tref_text = "{:05.2f}".format(tref_num)
-    tref_data.append(tref_num)
+
+    
     
     if timer_flag == 1:
+        
+        time_num = seconds
+        time_text = "{:05.2f}".format(time_num)
+        time_data.append(time_num)
+        t1_num = measure_temp(0)
+        t1_text = "{:05.2f}".format(t1_num)
+        t1_data.append(t1_num)
+        t2_num = measure_temp(2)
+        t2_text = "{:05.2f}".format(t2_num)
+        t2_data.append(t2_num)
+        t3_num = measure_temp(5)
+        t3_text = "{:05.2f}".format(t3_num)
+        t3_data.append(t3_num)
+        t4_num = measure_temp(7)
+        t4_text = "{:05.2f}".format(t4_num)
+        t4_data.append(t4_num)
+        tavg_num = (t1_num+t2_num+t3_num+t4_num)/4
+        tavg_text = "{:05.2f}".format(tavg_num)
+        tavg_data.append(tavg_num)
+        tref_num = max31855.reference_temperature
+        tref_text = "{:05.2f}".format(tref_num)
+        tref_data.append(tref_num)
+    
+       
+        if float(cont_temp) < tref_num:
+            GPIO.output(18, GPIO.LOW)
+            print("enfriar")
+        else:   
+            GPIO.output(18, GPIO.HIGH)
+            print("calentar")
+
+        
+        
         list.append([time_text, t1_text, t2_text, t3_text, t4_text, tavg_text, tref_text])
         csv_write(filename)
         tiempo_actual = datetime.now()
@@ -201,16 +220,22 @@ while True:
 
         past_time = tiempo_actual
         
+
+        
         if control == True:
-            err = abs((float(cont_temp) - tavg_num)/10)
-            if err > 1:
-                err = 1
-            if err > 0:
-                Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
-                Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
+            
+            controlc = pid(tavg_num)
+            
+            if float(cont_temp) < tref_num:
+                err = 1 - controlc
+                print("enfriar")
             else:
-                Fuente1.aplicar_voltaje_corriente(30,0.1)
-                Fuente2.aplicar_voltaje_corriente(30,0.1)
+                err = controlc
+                print("calentar")
+            
+            Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
+            Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
+ 
             
 
 
