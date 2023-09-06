@@ -62,35 +62,11 @@ fuente2.baud_rate = 9600
 Fuente2 = DP711.Fuente(fuente2, "DP711.2")
 
 
-#print("Calentar (c) o enfriar (e)?")
-#oper = input()
-#if oper == "c":
-#    GPIO.output(18, GPIO.HIGH)
-#elif oper == "e":
-#    GPIO.output(18, GPIO.LOW)
-#else:
-#    print("Error")
 
-#oper = ""
-
-print("Controlar (c) o usar corriente fija (f)?")
-oper = input()
-if oper == "c":
-    control = True
-    print("Temperatura en ºC:")
-    cont_temp = input()  
-elif oper == "f":
-    control = False
-    print("Corriente en A:")
-    cont_curr = input()
-    if float(cont_curr) > 5:
-        cont_curr = 5
-    print(Fuente1.aplicar_voltaje_corriente(30,cont_curr))
-    print(Fuente2.aplicar_voltaje_corriente(30,cont_curr))
-else:
-    print("Error")
-    
-oper = ""
+print("Control de temperatura constante")
+control = True
+print("Temperatura en ºC:")
+cont_temp = input()  
 
 # Identity of source
 print(fuente1.query("*IDN?"))
@@ -128,13 +104,7 @@ def csv_write(filename):
     with open(filename, "w+", newline="") as file:
         write = csv.writer(file)
         write.writerows(list)
-# 
-# 
-#             
-#     with open("temp_measurements.csv", "r") as file:
-#         read = csv.reader(file)
-#         #for row in read:
-#          #   print(row)
+
 
 def temp_figure():
     ax1 = plt.subplot(211)
@@ -199,11 +169,9 @@ while True:
     
        
         if float(cont_temp) < tref_num:
-            GPIO.output(18, GPIO.LOW)
-            print("enfriar")
+            GPIO.output(18, GPIO.HIGH)            
         else:   
-            GPIO.output(18, GPIO.HIGH)
-            print("calentar")
+            GPIO.output(18, GPIO.LOW)            
 
         
         
@@ -216,7 +184,7 @@ while True:
         drawnow(temp_figure)
         
 #        Mediciones de temperatura
-        print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 = "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
+        #print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 = "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
 
         past_time = tiempo_actual
         
@@ -228,10 +196,8 @@ while True:
             
             if float(cont_temp) < tref_num:
                 err = 1 - controlc
-                print("enfriar")
             else:
                 err = controlc
-                print("calentar")
             
             Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
             Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))

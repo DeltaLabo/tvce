@@ -10,12 +10,7 @@ class Fuente:
         self.name = name  # Nombre para identificar en depuracion
         self.delay_enable = tipoFuente
         self.modo = "2W"
-        id = ""
-        if self.delay_enable:
-            instrument.write_termination = '\n'
-            instrument.read_termination = '\n'
-            self.delay_enable = True
-            
+        id = ""            
         instrument.write("*IDN?")
         time.sleep(0.05)
         id = instrument.read()
@@ -39,9 +34,11 @@ class Fuente:
     # apply voltage & current
     def aplicar_voltaje_corriente(self, voltaje: float, corriente: float):
         self.instrument.write(":VOLT {}".format(voltaje))
-        time.sleep(0.1)
+        print(":VOLT {}".format(voltaje))
+        time.sleep(0.2)
         self.instrument.write(":CURR {}".format(corriente))
-        time.sleep(0.1)
+        print(":CURR {}".format(corriente))
+        time.sleep(0.2)
 #        self.instrument.write("SOUR:VOLT?")
 #        time.sleep(0.05)
 #        voltMeas = self.instrument.read()
