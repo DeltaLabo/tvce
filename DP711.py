@@ -34,20 +34,10 @@ class Fuente:
     # apply voltage & current
     def aplicar_voltaje_corriente(self, voltaje: float, corriente: float):
         self.instrument.write(":VOLT {}".format(voltaje))
-        print(":VOLT {}".format(voltaje))
         time.sleep(0.2)
         self.instrument.write(":CURR {}".format(corriente))
-        print(":CURR {}".format(corriente))
         time.sleep(0.2)
-#        self.instrument.write("SOUR:VOLT?")
-#        time.sleep(0.05)
-#        voltMeas = self.instrument.read()
-#        time.sleep(0.05)
-#        self.instrument.write("SOUR:CURR?")
-#        time.sleep(0.05)
-#        currMeas = self.instrument.read()
-#        time.sleep(0.05)
-        return True #"CH1:30V/5A," + voltMeas + "," + currMeas
+        return True
 
     # measure everything (in order returns: voltage, current and power)
     def medir_todo(self, channel: int):
@@ -60,10 +50,6 @@ class Fuente:
             time.sleep(0.05)
             corriente = float(self.instrument.read())
             time.sleep(0.05)
-            #self.instrument.write("MEAS:POWE? CH1")
-            #time.sleep(0.05)
-            #potencia = float(self.instrument.read())
-            #time.sleep(0.05)
             return voltaje, corriente#, potencia
         else:
             medicion = self.instrument.query(":MEASURE:ALL?").split(",")

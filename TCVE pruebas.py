@@ -2,6 +2,9 @@
 # Juan J. Rojas
 # Instituto Tecnológico de Costa Rica
 
+import tty
+import sys
+import termios
 import pyvisa
 import DP711
 import time
@@ -24,6 +27,7 @@ seconds = 0
 temp = 0
 control = False
 cont_temp = 0
+encender = 0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
 
 
@@ -33,6 +37,7 @@ GPIO.setup(18,GPIO.OUT) #Pin #18 RPi
 GPIO.setup(19,GPIO.OUT) #Pin #19 RPi
 GPIO.setup(20,GPIO.OUT) #Pin #20 RPi
 GPIO.setup(21,GPIO.OUT) #Pin #21 RPi
+GPIO.setup(16, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
 
 GPIO.output(18, GPIO.LOW)
 GPIO.output(19, GPIO.LOW)
@@ -67,19 +72,22 @@ Fuente2 = DP711.Fuente(fuente2, "DP711.2")
 print("Control de temperatura constante")
 control = True
 print("Temperatura en ºC:")
-cont_temp = input()  
+cont_temp = input() 
 
 # Identity of source
 print(fuente1.query("*IDN?"))
 print(fuente2.query("*IDN?"))
 
-# 
-Fuente1.encender_canal(1)
-Fuente2.encender_canal(1)
+def encender_fuentes(channel):
+    Fuente1.encender_canal(1)
+    Fuente2.encender_canal(1)
+
+GPIO.add_event_detect(16, GPIO.RISING, callback = encender_fuentes)
 
 def apagar_fuentes():
     Fuente1.apagar_canal(1)
     Fuente2.apagar_canal(1)
+
 
 #Interrupt Service Routine
 #Executed in response to an event such as a time trigger or a voltage change on a pin
@@ -140,7 +148,9 @@ pid = PID(0.5, 0.01, 0.5, setpoint = float(cont_temp))
 pid.output_limits = (0,1)
 
 while True:
-        
+
+    
+    
     if timer_flag == 1:
         
         time_num = seconds
@@ -182,10 +192,11 @@ while True:
         drawnow(temp_figure)
         
 #        Mediciones de temperatura
-        print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 =  "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
+        #print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 = "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
 
         past_time = tiempo_actual
         
+
         
         if control == True:
             
@@ -198,6 +209,7 @@ while True:
             
             Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
             Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
+        
 
 
       
