@@ -43,45 +43,39 @@ spi = board.SPI()
 cs = digitalio.DigitalInOut(board.D5)
 max31855 = adafruit_max31855.MAX31855(spi, cs)
 
-#To show connected sources
+# #To show connected sources
 
-rm = pyvisa.ResourceManager()
+# rm = pyvisa.ResourceManager()
+# print(rm.list_resources())
 
+# #Configure the sources
 
-#Configure the sources
+# fuente1 = rm.open_resource(rm.list_resources()[0])
+# fuente1.write_termination = '\n'
+# fuente1.read_termination = '\n'
+# fuente1.baud_rate = 9600
+# Fuente1 = DP711.Fuente(fuente1, "DP711.1")
 
-
-
-
-fuente1 = rm.open_resource(rm.list_resources()[0])
-fuente1.write("*IDN?")
-
-print(fuente1.read())
-fuente1.write_termination = '\n'
-fuente1.read_termination = '\n'
-fuente1.baud_rate = 9600
-Fuente1 = DP711.Fuente(fuente1, "DP711.1")
-
-fuente2 = rm.open_resource(rm.list_resources()[1])
-fuente2.write_termination = '\n'
-fuente2.read_termination = '\n'
-fuente2.baud_rate = 9600
-Fuente2 = DP711.Fuente(fuente2, "DP711.2")
+# fuente2 = rm.open_resource(rm.list_resources()[1])
+# fuente2.write_termination = '\n'
+# fuente2.read_termination = '\n'
+# fuente2.baud_rate = 9600
+# Fuente2 = DP711.Fuente(fuente2, "DP711.2")
 
 
 
-print("Control de temperatura constante")
-control = True
-print("Temperatura en ºC:")
-cont_temp = input()  
+# ~ print("Control de temperatura constante")
+# control = True
+# print("Temperatura en ºC:")
+# cont_temp = input()  
 
-# Identity of source
-print(fuente1.query("*IDN?"))
-print(fuente2.query("*IDN?"))
+# # Identity of source
+# print(fuente1.query("*IDN?"))
+# print(fuente2.query("*IDN?"))
 
-# 
-Fuente1.encender_canal(1)
-Fuente2.encender_canal(1)
+# # 
+# Fuente1.encender_canal(1)
+# Fuente2.encender_canal(1)
 
 def apagar_fuentes():
     Fuente1.apagar_canal(1)
@@ -101,11 +95,7 @@ def measure_temp(channel):
     GPIO.output(20, (channel & 0b010)>1)
     GPIO.output(21, (channel & 0b100)>2)
     time.sleep(0.2)
-    try:
-        temp = max31855.temperature
-    except: 
-        temp = 70
-    return temp #Measure Temp
+    return max31855.temperature #Measure Temp
 
 base = "/home/pi/tvce_data/"
 filename = base + "temp_measurements_" + file_date + ".csv"
@@ -174,16 +164,12 @@ while True:
         tref_num = max31855.reference_temperature
         tref_text = "{:05.2f}".format(tref_num)
         tref_data.append(tref_num)
-        
-        if (t1_num >= 70) | (t2_num >= 70) | (t3_num >= 70) |  (t4_num >= 70):
-            apagar_fuentes()
-            break
     
        
-        if float(cont_temp) < tref_num:
-            GPIO.output(18, GPIO.HIGH)            
-        else:   
-            GPIO.output(18, GPIO.LOW)            
+        # if float(cont_temp) < tref_num:
+            # GPIO.output(18, GPIO.HIGH)            
+        # else:   
+            # GPIO.output(18, GPIO.LOW)            
 
         
         
@@ -201,17 +187,17 @@ while True:
         past_time = tiempo_actual
         
         
-        if control == True:
+        # if control == True:
             
-            controlc = pid(tavg_num)
+            # controlc = pid(tavg_num)
             
-            if float(cont_temp) < tref_num:
-                err = 1 - controlc
-            else:
-                err = controlc
+            # if float(cont_temp) < tref_num:
+                # err = 1 - controlc
+            # else:
+                # err = controlc
             
-            Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
-            Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
+            # Fuente1.aplicar_voltaje_corriente(30,round(err*5,2))
+            # Fuente2.aplicar_voltaje_corriente(30,round(err*5,2))
 
 
       
