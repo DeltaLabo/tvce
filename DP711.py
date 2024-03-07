@@ -10,14 +10,12 @@ class Fuente:
         self.name = name  # Nombre para identificar en depuracion
         self.delay_enable = tipoFuente
         self.modo = "2W"
-        id = ""            
-        instrument.write("*IDN?")
-        time.sleep(0.05)
-        id = instrument.read()
-        print("ID: {}".format(id))
-
-
-
+        # ~ id = ""            
+        # ~ instrument.write("*IDN?")
+        # ~ time.sleep(0.05)
+        # ~ id = instrument.read()
+        # ~ print("ID: {}".format(id))
+        
     # turn on channel
     def encender_canal(self, channel: int):
         self.instrument.write(":OUTP:STAT CH{:n},ON".format(channel))
