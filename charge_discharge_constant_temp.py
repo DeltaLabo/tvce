@@ -21,7 +21,9 @@ class equipment:
     heater2 = "RIGOL TECHNOLOGIES,DP711,DP7A242201004,00.01.05\n"
     source = "RIGOL TECHNOLOGIES,DP811A,DP8D235000392,00.01.16\n"
     load = "RIGOL TECHNOLOGIES,DL3021,DL3A213700642,00.01.05.00.01\n"
-    
+
+on = True 
+start = False   
 timer_flag = 0
 past_time = datetime.now()
 seconds = 0
@@ -75,8 +77,8 @@ Heater2 = DP711.Fuente(heater2, "DP711.2")
 Load = controller.Carga(load, "DL3021")
 Source = DP711.Fuente(source, "DP811A")
 
-# ~ Load.fijar_funcion("CURR")
-# ~ Load.remote_sense(True)
+Load.fijar_funcion("CURR")
+Load.remote_sense(True)
 # ~ Load.fijar_corriente(1.5) #Descargando a C/35
 # ~ Load.encender_carga()
 
@@ -102,6 +104,9 @@ Heater2.encender_canal(1)
 def apagar_fuentes():
     Heater1.apagar_canal(1)
     Heater2.apagar_canal(1)
+    Source.apagar_canal(1)
+    Load.apagar_carga()
+    
 
 #Interrupt Service Routine
 #Executed in response to an event such as a time trigger or a voltage change on a pin
@@ -127,11 +132,25 @@ showcounter = 0 #something to demonstrate the change
 
 def my_callback(inp):
     #evaluate the keyboard input
+    global start
+    global control
+    global on
+    global state
+    global States
     match inp:
-        case "a":
+        case "off":
             control = False
             apagar_fuentes()
+            state = States.Idle
             print("Turning off peltier drivers")
+        case "stop":
+            control = False
+            apagar_fuentes()
+            on = False
+            print("Stopping the process")
+        case "start":
+            start = True
+            print("Starting the state machine")
 
 #start the Keyboard thread
 kthread = KeyboardThread(my_callback)
@@ -180,36 +199,48 @@ pid.output_limits = (0,1)
 
 
 class States:
-    Charge = 0
-    Discharge = 1
+    Idle = 0
+    Wait = 1
+    Charge = 2
+    Discharge = 3
+    DC_Res = 4
 
 statelist = [States.Charge, States.Discharge]
 
 print(statelist)
 
 
-
-def state_machine(state_class, state):
+firstCycle = True
+def state_machine(States, EOD, EOC):
+    global start
+    global state
+    global firstCycle
+    # ~ print(start,state)
     match state:
-        case state_class.Charge:
-            fCharge(voltage,current,EOC)
-        case state_class.Discharge:
-            fDischarge(voltage,current,EOD)
-
-
-def fCharge(voltage, current, EOC, vmeas, cmeas):
-    print("Charge")
-    # ~ Source.aplicar_voltaje_corriente(4.2,0.1)
-    # ~ Source.encender_canal(1)
-    # ~ if cmeas < EOC:
-        # ~ state = States.Discharge
-        
-def fCharge(voltage, current, EOC, vmeas, cmeas):
-    print("Charge")
-    # ~ Source.aplicar_voltaje_corriente(4.2,0.1)
-    # ~ Source.encender_canal(1)
-    # ~ if cmeas < EOC:
-        # ~ state = States.Discharge
+        case States.Idle:
+            if start == True:
+                state = States.Charge
+                print(States.Charge, state)
+        case States.Charge:
+            print("Charge")
+            Source.aplicar_voltaje_corriente(4.2,1.5)
+            # ~ Source.toggle_4w()
+            Source.encender_canal(1)
+            if firstCycle == True:
+                time.sleep(3)
+                firstCycle = False
+            vmeas,cmeas = Source.medir_todo(1)
+            if cmeas < EOC:
+                state = States.Discharge
+                Source.apagar_canal(1)
+        case States.Discharge:
+            print("Discharge")
+            Load.fijar_corriente(1.5)
+            Load.encender_carga()
+            vmeas,cmeas = Load.medir_todo()
+            if vmeas < EOD:
+                state = States.Discharge
+                Load.apagar_carga()
 
 
         
@@ -283,7 +314,11 @@ def control_temperatura():
 
 past_time = datetime.now()
 
-while True:
+state = States.Idle
+EOD = 2.5
+EOC = 0.2 
+
+while on:
     if timer_flag == 1:
         timer_flag = 0
         fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref)
@@ -294,6 +329,7 @@ while True:
         seconds += deltat
         # ~ build_seconds(past_time, datetime.now(), seconds)
         control_temperatura()
+        state_machine(States, EOD, EOC)
         drawnow(temp_figure)
         past_time = actual_time
 
