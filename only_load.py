@@ -7,6 +7,12 @@ import board
 import digitalio
 import adafruit_max31855
 from datetime import datetime
+import threading
+import pandas as pd
+import matplotlib.pyplot as plt
+from drawnow import drawnow
+from simple_pid import PID
+import csv
 # ~ import maquina_de_estados
 
 
@@ -64,41 +70,6 @@ for i in range(len(res)):
 		print("Fuente DP711.2 encontrada")
 		print(heater2.query("*IDN?"))
 
-# ~ for inst in range(len(res)): 
-	# ~ insti = rm.open_resource(rm.list_resources()[inst])
-	# ~ try:
-		# ~ insti.write("*IDN?")
-		# ~ time.sleep(0.2)
-		# ~ aux = insti.read()
-	# ~ except:
-		# ~ print("Not VISA")
-	# ~ print(aux)
-	# ~ match aux:
-		# ~ case equipment.heater1:
-			# ~ try:
-				# ~ heater1 = rm.open_resource(rm.list_resources()[inst])
-				# ~ print("Heater1 asigned", end="\n\n")
-			# ~ except:
-				# ~ print("Error assigning Heater1", end="\n\n")
-		# ~ case equipment.heater2:
-			# ~ try: 
-				# ~ heater2 = rm.open_resource(rm.list_resources()[inst])            
-				# ~ print("Heater2 asigned", end="\n\n")
-			# ~ except:
-				# ~ print("Error assigning Heater2", end="\n\n")
-		# ~ case equipment.source:
-			# ~ try:
-				# ~ source = rm.open_resource(rm.list_resources()[inst])
-				# ~ print("Source asigned", end="\n\n")
-			# ~ except:
-				# ~ print("Error assigning Source", end="\n\n")
-		# ~ case equipment.load:
-            # ~ try:
-                # ~ load = rm.open_resource(rm.list_resources()[inst])
-                # ~ print("Load asigned", end="\n\n")
-            # ~ except:
-                # ~ print("Error assigning Load", end="\n\n")    
-
 Heater1 = DP711.Fuente(heater1, "DP711.1")
 Heater2 = DP711.Fuente(heater2, "DP711.2")
 Load = controller.Carga(load, "DL3021")
@@ -117,7 +88,141 @@ time.sleep(20)
 Load.apagar_carga()
 Source.apagar_canal(1)
 
+print("Control de temperatura constante")
+control = True
+print("Temperatura en ºC:")
+cont_temp = input()  
 
-# ~ Load.cargar_celda(1.5)
+Heater1.aplicar_voltaje_corriente(0,0)
+Heater2.aplicar_voltaje_corriente(0,0)
+Heater1.encender_canal(1)
+Heater2.encender_canal(1)
+
+
+def apagar_fuentes():
+    Heater1.apagar_canal(1)
+    Heater2.apagar_canal(1)
+
+#Interrupt Service Routine
+#Executed in response to an event such as a time trigger or a voltage change on a pin
+def ISR():
+    global timer_flag
+    t = threading.Timer(2.0, ISR) #ISR se ejecuta cada 1 s mediante threading
+    t.start()
+    timer_flag = 1 #Al iniciar el hilo, el timer_flag pasa a ser 1
+
+def measure_temp(channel):
+    GPIO.output(19, channel & 0b001)
+    GPIO.output(20, (channel & 0b010)>1)
+    GPIO.output(21, (channel & 0b100)>2)
+    time.sleep(0.2)
+    try:
+        temp = max31855.temperature
+    except: 
+        temp = 70
+    return temp #Measure Temp
+
+base = "/home/delta/tvce_data/"
+filename = base + "temp_measurements_" + file_date + ".csv"
+
+def csv_write(filename):
+    with open(filename, "w+", newline="") as file:
+        write = csv.writer(file)
+        write.writerows(list)
+
+def temp_figure():
+    ax1 = plt.subplot(211)
+    plt.plot(time_data,tavg_data)
+    ax2 = plt.subplot(212, sharex=ax1)
+    plt.plot(time_data,t1_data)
+    plt.plot(time_data,t2_data)
+    plt.plot(time_data,t3_data)
+    plt.plot(time_data,t4_data)
+    plt.setp(ax2.get_xticklabels(),visible=False)
+
+######################## Programa Principal ########################
+t = threading.Timer(2.0, ISR)
+t.start() #Después de 5 segundos ejecutará lo de medición ()
+list = [] #Para guardar en csv
+
+plt.ion()
+fig = plt.figure()
+
+time_data = []
+t1_data = []
+t2_data = []
+t3_data = []
+t4_data = []
+tavg_data = []
+tref_data = []
+
+pid = PID(0.5, 0.01, 0.5, setpoint = float(cont_temp))
+pid.output_limits = (0,1)
+
+while True:
+        
+    if timer_flag == 1:
+        
+        time_num = seconds
+        time_text = "{:05.2f}".format(time_num)
+        time_data.append(time_num)
+        t1_num = measure_temp(0)
+        t1_text = "{:05.2f}".format(t1_num)
+        t1_data.append(t1_num)
+        t2_num = measure_temp(2)
+        t2_text = "{:05.2f}".format(t2_num)
+        t2_data.append(t2_num)
+        t3_num = measure_temp(5)
+        t3_text = "{:05.2f}".format(t3_num)
+        t3_data.append(t3_num)
+        t4_num = measure_temp(7)
+        t4_text = "{:05.2f}".format(t4_num)
+        t4_data.append(t4_num)
+        tavg_num = (t1_num+t2_num+t3_num+t4_num)/4
+        tavg_text = "{:05.2f}".format(tavg_num)
+        tavg_data.append(tavg_num)
+        tref_num = max31855.reference_temperature
+        tref_text = "{:05.2f}".format(tref_num)
+        tref_data.append(tref_num)
+        
+        if (t1_num >= 70) | (t2_num >= 70) | (t3_num >= 70) |  (t4_num >= 70):
+            apagar_fuentes()
+            break
+    
+        if float(cont_temp) < tref_num:
+            GPIO.output(18, GPIO.HIGH)            
+        else:   
+            GPIO.output(18, GPIO.LOW)            
+
+        list.append([time_text, t1_text, t2_text, t3_text, t4_text, tavg_text, tref_text])
+        csv_write(filename)
+        tiempo_actual = datetime.now()
+        deltat = (tiempo_actual - past_time).total_seconds()
+        seconds += deltat  
+        timer_flag = 0
+        drawnow(temp_figure)
+        
+#        Mediciones de temperatura
+        print("t = "+time_text+",", "t1 = "+t1_text+",", "t2 = "+t2_text+",", "t3 = "+t3_text+",", "t4 =  "+t4_text+",", "tavg = "+tavg_text+",", "tref = "+tref_text+"")
+
+        past_time = tiempo_actual
+        
+        
+        if control == True:
+            
+            controlc = pid(tavg_num)
+            
+            if float(cont_temp) < tref_num:
+                err = 1 - controlc
+            else:
+                err = controlc
+            
+            Heater1.aplicar_voltaje_corriente(30,round(err*5,2))
+            Heater2.aplicar_voltaje_corriente(30,round(err*5,2))
+
+
+
+GPIO.cleanup() 
+
 
 

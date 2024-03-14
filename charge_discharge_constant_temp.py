@@ -1,6 +1,5 @@
 import pyvisa
-import controller
-import DP711
+from instrument_driver import controller
 import time
 import RPi.GPIO as GPIO
 import board
@@ -15,13 +14,6 @@ from simple_pid import PID
 import csv
 # ~ import maquina_de_estados
 
-
-class equipment:
-    heater1 = "RIGOL TECHNOLOGIES,DP711,DP7A242200986,00.01.05\n"
-    heater2 = "RIGOL TECHNOLOGIES,DP711,DP7A242201004,00.01.05\n"
-    source = "RIGOL TECHNOLOGIES,DP811A,DP8D235000392,00.01.16\n"
-    load = "RIGOL TECHNOLOGIES,DL3021,DL3A213700642,00.01.05.00.01\n"
-
 on = True 
 start = False   
 timer_flag = 0
@@ -32,90 +24,82 @@ control = False
 cont_temp = 0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
     
+# Initialize GPIO
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(18,GPIO.OUT) #Pin #18 RPi
-GPIO.setup(19,GPIO.OUT) #Pin #19 RPi
-GPIO.setup(20,GPIO.OUT) #Pin #20 RPi
-GPIO.setup(21,GPIO.OUT) #Pin #21 RPi
+pins = [18, 19, 20, 21]
+for pin in pins:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.LOW)
 
-GPIO.output(18, GPIO.LOW)
-GPIO.output(19, GPIO.LOW)
-GPIO.output(20, GPIO.LOW)
-GPIO.output(21, GPIO.LOW)
-
+# Initialize SPI and MAX31855
 spi = board.SPI()
 cs = digitalio.DigitalInOut(board.D5)
 max31855 = adafruit_max31855.MAX31855(spi, cs)
 
-
+# Initialize pyvisa
 rm = pyvisa.ResourceManager()
 res = rm.list_resources()
-print(len(res))
+print("Cantidad de instrumentos encontrados:", len(res))
 
-for i in range(len(res)):
-	print(res[i])
-	if res[i].find("DL3A21") > 0:
-		load = rm.open_resource(rm.list_resources()[i]) 
-		print("Carga DL3A21 encontrada")
-		print(load.query("*IDN?"))
-	elif res[i].find("DP8D23") > 0:
-		source = rm.open_resource(rm.list_resources()[i]) 
-		print("Fuente DP811A encontrada")
-		print(source.query("*IDN?"))
-	elif res[i].find("ttyUSB0") > 0:
-		heater1 = rm.open_resource(rm.list_resources()[i]) 
-		print("Fuente DP711.1 encontrada")
-		print(heater1.query("*IDN?"))
-	elif res[i].find("ttyUSB1") > 0:
-		heater2 = rm.open_resource(rm.list_resources()[i]) 
-		print("Fuente DP711.2 encontrada")
-		print(heater2.query("*IDN?"))
+# Find and initialize instrumnts
+for resource in res:
+    if "DL3A21" in resource:
+        load = rm.open_resource(resource)
+        print("Carga DL3A21 encontrada")
+        print(load.query("*IDN?"))
+    elif "DP8D23" in resource:
+        source = rm.open_resource(resource)
+        print("Fuente DP811A encontrada")
+        print(source.query("*IDN?"))
+    elif "ttyUSB0" in resource:
+        heater1 = rm.open_resource(resource)
+        heater1.query_delay = 0.4
+        print("Fuente DP711.1 encontrada")
+        print(heater1.query("*IDN?"))
+    elif "ttyUSB1" in resource:
+        heater2 = rm.open_resource(resource)
+        heater2.query_delay = 0.4
+        print("Fuente DP711.2 encontrada")
+        print(heater2.query("*IDN?"))
 
-Heater1 = DP711.Fuente(heater1, "DP711.1")
-Heater2 = DP711.Fuente(heater2, "DP711.2")
-Load = controller.Carga(load, "DL3021")
-Source = DP711.Fuente(source, "DP811A")
+Heater1 = controller.Source(heater1)
+Heater2 = controller.Source(heater2)
+Load = controller.Load(load)
+Source = controller.Source(source)
 
-Load.fijar_funcion("CURR")
+Load.set_function("CURR")
 Load.remote_sense(True)
-# ~ Load.fijar_corriente(1.5) #Descargando a C/35
-# ~ Load.encender_carga()
+# ~ Load.set_current(1.5) #Descargando a C/35
+# ~ Load.turn_on_load()
 
 
-# ~ Source.aplicar_voltaje_corriente(4.2,0.1)
-# ~ Source.encender_canal(1)
+# ~ Source.apply_voltage_current(4.2,0.1)
+# ~ Source.turn_on_channel(1)
 
 # ~ time.sleep(20)
-# ~ Load.apagar_carga()
-# ~ Source.apagar_canal(1)
+# ~ Load.turn_off_load()
+# ~ Source.turn_off_channel(1)
 
 print("Control de temperatura constante")
 control = True
 print("Temperatura en ºC:")
 cont_temp = input()  
 
-Heater1.aplicar_voltaje_corriente(0,0)
-Heater2.aplicar_voltaje_corriente(0,0)
-Heater1.encender_canal(1)
-Heater2.encender_canal(1)
+Heater1.apply_voltage_current(1,0,0)
+Heater2.apply_voltage_current(1,0,0)
+Heater1.turn_on_channel(1)
+Heater2.turn_on_channel(1)
 
 
 def apagar_fuentes():
-    Heater1.apagar_canal(1)
-    Heater2.apagar_canal(1)
-    Source.apagar_canal(1)
-    Load.apagar_carga()
+    Heater1.turn_off_channel(1)
+    Heater2.turn_off_channel(1)
+    Source.turn_off_channel(1)
+    Load.turn_off_load()
     
 
-#Interrupt Service Routine
-#Executed in response to an event such as a time trigger or a voltage change on a pin
-def ISR():
-    global timer_flag
-    t = threading.Timer(2.0, ISR) #ISR se ejecuta cada 1 s mediante threading
-    t.start()
-    timer_flag = 1 #Al iniciar el hilo, el timer_flag pasa a ser 1
-    
+
     
 class KeyboardThread(threading.Thread):
 
@@ -186,6 +170,14 @@ def temp_figure():
     plt.plot(times.data,t4.data)
     plt.setp(ax2.get_xticklabels(),visible=False)
 
+#Interrupt Service Routine
+#Executed in response to an event such as a time trigger or a voltage change on a pin
+def ISR():
+    global timer_flag
+    t = threading.Timer(2.0, ISR) #ISR se ejecuta cada 1 s mediante threading
+    t.start()
+    timer_flag = 1 #Al iniciar el hilo, el timer_flag pasa a ser 1
+
 ######################## Programa Principal ########################
 t = threading.Timer(2.0, ISR)
 t.start() #Después de 5 segundos ejecutará lo de medición ()
@@ -223,41 +215,25 @@ def state_machine(States, EOD, EOC):
                 print(States.Charge, state)
         case States.Charge:
             print("Charge")
-            Source.aplicar_voltaje_corriente(4.2,1.5)
+            Source.apply_voltage_current(1,4.2,1.5)
             # ~ Source.toggle_4w()
-            Source.encender_canal(1)
+            Source.turn_on_channel(1)
             if firstCycle == True:
                 time.sleep(3)
                 firstCycle = False
-            vmeas,cmeas = Source.medir_todo(1)
+            vmeas,cmeas, _ = Source.measure_all(1)
             if cmeas < EOC:
                 state = States.Discharge
-                Source.apagar_canal(1)
+                Source.turn_off_channel(1)
         case States.Discharge:
             print("Discharge")
-            Load.fijar_corriente(1.5)
-            Load.encender_carga()
-            vmeas,cmeas = Load.medir_todo()
+            Load.set_current(1.5)
+            Load.turn_on_load()
+            # vmeas,cmeas, _ = Load.measure_all()
+            vmeas,cmeas = Load.measure_all()
             if vmeas < EOD:
                 state = States.Discharge
-                Load.apagar_carga()
-
-
-        
-class misc:
-    def __init__(self, num, text, data):
-        self.num = num
-        self.text = text
-        self.data = data
-        
-
-t1 = misc(0,"",[])
-t2 = misc(0,"",[])
-t3 = misc(0,"",[])
-t4 = misc(0,"",[])
-tavg = misc(0,"",[])
-tref = misc(0,"",[])
-times = misc(0,"",[])
+                Load.turn_off_load()
 
 
 
@@ -309,14 +285,32 @@ def control_temperatura():
         err = 1 - controlc
     else:
         err = controlc
-    Heater1.aplicar_voltaje_corriente(30,round(err*5,2))
-    Heater2.aplicar_voltaje_corriente(30,round(err*5,2))
+    Heater1.apply_voltage_current(1,30,round(err*5,2))
+    Heater2.apply_voltage_current(1,30,round(err*5,2))
 
 past_time = datetime.now()
 
 state = States.Idle
 EOD = 2.5
 EOC = 0.2 
+
+class misc:
+    def __init__(self, num, text, data):
+        self.num = num
+        self.text = text
+        self.data = data
+        
+
+t1 = misc(0,"",[])
+t2 = misc(0,"",[])
+t3 = misc(0,"",[])
+t4 = misc(0,"",[])
+tavg = misc(0,"",[])
+tref = misc(0,"",[])
+times = misc(0,"",[])
+
+
+    
 
 while on:
     if timer_flag == 1:
