@@ -272,13 +272,15 @@ def relay_control():
     else:   
         GPIO.output(18, GPIO.LOW)            
 
-def build_seconds(past_time, actual_time, seconds):
+def build_seconds(past_time, actual_time):
+    global seconds
     actual_time = datetime.now()
     deltat = (actual_time - past_time).total_seconds()
     seconds += deltat
     past_time = actual_time
     
 def control_temperatura():
+    control = 1.0
     if control == True:
         controlc = pid(tavg.num)
     if float(cont_temp) < tref.num:
@@ -318,14 +320,11 @@ while on:
         fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref)
         protection()
         relay_control()
-        actual_time = datetime.now()
-        deltat = (actual_time - past_time).total_seconds()
-        seconds += deltat
-        # ~ build_seconds(past_time, datetime.now(), seconds)
+        build_seconds(past_time, datetime.now())
         control_temperatura()
         state_machine(States, EOD, EOC)
         drawnow(temp_figure)
-        past_time = actual_time
+        # past_time = actual_time
 
 GPIO.cleanup() 
 
