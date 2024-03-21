@@ -20,7 +20,7 @@ timer_flag = 0
 seconds = 0
 temp = 0
 control = False
-cont_temp = 0
+cont_temp = 0.0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
 lista = [] #Para guardar en csv
 
@@ -74,7 +74,10 @@ Load.remote_sense(True)
 print("Control de temperatura constante")
 control = True
 print("Temperatura en ºC:")
-cont_temp = input()  
+cont_temp = float(input())  
+
+pid = PID(0.5, 0.01, 0.5, setpoint = cont_temp)
+pid.output_limits = (0,1)
 
 Heater1.apply_voltage_current(1,0,0)
 Heater2.apply_voltage_current(1,0,0)
@@ -109,6 +112,7 @@ def my_callback(inp):
     global on
     global state
     global States
+    global cont_temp
     match inp:
         case "charge":
             state = States.Charge
@@ -129,12 +133,16 @@ def my_callback(inp):
         case "start":
             start = True
             print("Starting the state machine")
-        # ~ case "Cooler"
-            # ~ print("decreasing 10ºC")
-            # ~ cont_temp -= 10
-        case "hotter"
+        case "colder":
+            print("decreasing 10ºC")
+            cont_temp -= 10
+            pid.setpoint = cont_temp
+            print(f"Temperatura Actual: {cont_temp}") 
+        case "hotter":
             print("Increasing 10ºC")
-            cont_temp += 10 
+            cont_temp += 10
+            pid.setpoint = cont_temp
+            print(f"Temperatura Actual: {cont_temp}") 
         
             
 
@@ -169,10 +177,10 @@ def temp_figure():
     ax1.set_title("Average Temperature")
     ax1.set_ylabel("Degrees C")
     ax2 = plt.subplot(412, sharex=ax1)
-    plt.plot(times.data,t1.data, label = "T1")
-    plt.plot(times.data,t2.data, label = "T2")
-    plt.plot(times.data,t3.data, label = "T3")
-    plt.plot(times.data,t4.data, label = "T4")
+    plt.plot(times.data[-750:],t1.data[-750:], label = "T1")
+    plt.plot(times.data[-750:],t2.data[-750:], label = "T2")
+    plt.plot(times.data[-750:],t3.data[-750:], label = "T3")
+    plt.plot(times.data[-750:],t4.data[-750:], label = "T4")
     plt.setp(ax2.get_xticklabels(),visible=False)
     ax2.set_title("Sensor Temperature")
     ax2.set_ylabel("Degrees C")
@@ -204,8 +212,7 @@ t.start() #Después de 5 segundos ejecutará lo de medición ()
 plt.ion()
 fig = plt.figure(figsize=(6.4, 9.6))
 
-pid = PID(0.5, 0.01, 0.5, setpoint = float(cont_temp))
-pid.output_limits = (0,1)
+
 
 
 class States:
@@ -242,6 +249,7 @@ def state_machine(States, EOD, EOC):
             if cmeas < EOC:
                 state = States.Wait
                 Source.turn_off_channel(1)
+            # ~ state=States.wait
         case States.Discharge:
             Load.set_current(2)
             Load.turn_on_load()
@@ -298,12 +306,13 @@ def build_seconds(actual_time):
     deltat = (actual_time - past_time).total_seconds()
     seconds += deltat
     past_time = actual_time
-    
+
 def control_temperature():
+    global cont_temp
     controlc = 0
     if control == True:
         controlc = pid(tavg.num)
-    if float(cont_temp) < tref.num:
+    if cont_temp < tref.num:
         err = 1 - controlc
     else:
         err = controlc
