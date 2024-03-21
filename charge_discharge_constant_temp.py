@@ -17,13 +17,13 @@ import csv
 on = True 
 start = False   
 timer_flag = 0
-past_time = datetime.now()
 seconds = 0
 temp = 0
 control = False
 cont_temp = 0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
-    
+lista = [] #Para guardar en csv
+
 # Initialize GPIO
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
@@ -70,16 +70,6 @@ Source = controller.Source(source)
 
 Load.set_function("CURR")
 Load.remote_sense(True)
-# ~ Load.set_current(1.5) #Descargando a C/35
-# ~ Load.turn_on_load()
-
-
-# ~ Source.apply_voltage_current(4.2,0.1)
-# ~ Source.turn_on_channel(1)
-
-# ~ time.sleep(20)
-# ~ Load.turn_off_load()
-# ~ Source.turn_off_channel(1)
 
 print("Control de temperatura constante")
 control = True
@@ -112,8 +102,6 @@ class KeyboardThread(threading.Thread):
         while True:
             self.input_cbk(input()) #waits to get input + Return
 
-showcounter = 0 #something to demonstrate the change
-
 def my_callback(inp):
     #evaluate the keyboard input
     global start
@@ -122,6 +110,12 @@ def my_callback(inp):
     global state
     global States
     match inp:
+        case "charge":
+            state = States.Charge
+            print("Charging the battery")
+        case "discharge":
+            state = States.Discharge
+            print("Discharging the battery")
         case "off":
             control = False
             apagar_fuentes()
@@ -135,6 +129,14 @@ def my_callback(inp):
         case "start":
             start = True
             print("Starting the state machine")
+        # ~ case "Cooler"
+            # ~ print("decreasing 10ºC")
+            # ~ cont_temp -= 10
+        case "hotter"
+            print("Increasing 10ºC")
+            cont_temp += 10 
+        
+            
 
 #start the Keyboard thread
 kthread = KeyboardThread(my_callback)
@@ -156,35 +158,51 @@ base = "/home/delta/tvce_data/"
 filename = base + "temp_measurements_" + file_date + ".csv"
 
 def csv_write(filename):
+    global lista
     with open(filename, "w+", newline="") as file:
         write = csv.writer(file)
         write.writerows(lista)
 
 def temp_figure():
-    ax1 = plt.subplot(211)
+    ax1 = plt.subplot(411)
     plt.plot(times.data,tavg.data)
-    ax2 = plt.subplot(212, sharex=ax1)
-    plt.plot(times.data,t1.data)
-    plt.plot(times.data,t2.data)
-    plt.plot(times.data,t3.data)
-    plt.plot(times.data,t4.data)
+    ax1.set_title("Average Temperature")
+    ax1.set_ylabel("Degrees C")
+    ax2 = plt.subplot(412, sharex=ax1)
+    plt.plot(times.data,t1.data, label = "T1")
+    plt.plot(times.data,t2.data, label = "T2")
+    plt.plot(times.data,t3.data, label = "T3")
+    plt.plot(times.data,t4.data, label = "T4")
     plt.setp(ax2.get_xticklabels(),visible=False)
+    ax2.set_title("Sensor Temperature")
+    ax2.set_ylabel("Degrees C")
+    ax2.legend()
+    ax3 = plt.subplot(413)
+    plt.plot(times.data, voltage)
+    ax3.set_title("Battery Voltage")
+    ax3.set_ylabel("Volts")
+    ax4 = plt.subplot(414)
+    plt.plot(times.data, current)
+    ax4.set_title("Battery Current")
+    ax4.set_ylabel("Amps")
+    
+    fig.text(0.5, 0.01, "State: {}".format(state), ha='center')
+    plt.tight_layout()
 
 #Interrupt Service Routine
 #Executed in response to an event such as a time trigger or a voltage change on a pin
 def ISR():
     global timer_flag
-    t = threading.Timer(2.0, ISR) #ISR se ejecuta cada 1 s mediante threading
+    t = threading.Timer(5.0, ISR) #ISR se ejecuta cada 1 s mediante threading
     t.start()
     timer_flag = 1 #Al iniciar el hilo, el timer_flag pasa a ser 1
 
 ######################## Programa Principal ########################
-t = threading.Timer(2.0, ISR)
+t = threading.Timer(5.0, ISR)
 t.start() #Después de 5 segundos ejecutará lo de medición ()
-lista = [] #Para guardar en csv
 
 plt.ion()
-fig = plt.figure()
+fig = plt.figure(figsize=(6.4, 9.6))
 
 pid = PID(0.5, 0.01, 0.5, setpoint = float(cont_temp))
 pid.output_limits = (0,1)
@@ -199,10 +217,8 @@ class States:
 
 statelist = [States.Charge, States.Discharge]
 
-print(statelist)
-
-
 firstCycle = True
+
 def state_machine(States, EOD, EOC):
     global start
     global state
@@ -212,10 +228,11 @@ def state_machine(States, EOD, EOC):
         case States.Idle:
             if start == True:
                 state = States.Charge
-                print(States.Charge, state)
+        case States.Wait:
+            time.sleep(10)
+            state = States.Idle
         case States.Charge:
-            print("Charge")
-            Source.apply_voltage_current(1,4.2,1.5)
+            Source.apply_voltage_current(1,4.2,2)
             # ~ Source.toggle_4w()
             Source.turn_on_channel(1)
             if firstCycle == True:
@@ -223,23 +240,23 @@ def state_machine(States, EOD, EOC):
                 firstCycle = False
             vmeas,cmeas, _ = Source.measure_all(1)
             if cmeas < EOC:
-                state = States.Discharge
+                state = States.Wait
                 Source.turn_off_channel(1)
         case States.Discharge:
-            print("Discharge")
-            Load.set_current(1.5)
+            Load.set_current(2)
             Load.turn_on_load()
             # vmeas,cmeas, _ = Load.measure_all()
             vmeas,cmeas = Load.measure_all()
             if vmeas < EOD:
-                state = States.Discharge
+                state = States.Wait
                 Load.turn_off_load()
+                start = False
 
 
 
-def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref):
-    times.num = seconds
-    times.text = "{:05.2f}".format(times.num)
+def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
+    times.num = seconds / 60
+    times.text = "{:05.3f}".format(times.num)
     times.data.append(times.num)
     t1.num = measure_temp(0)
     t1.text = "{:05.2f}".format(t1.num)
@@ -259,7 +276,9 @@ def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref):
     tref.num = max31855.reference_temperature
     tref.text = "{:05.2f}".format(tref.num)
     tref.data.append(tref.num)
-    lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text])
+    voltage.append(draw_volt)
+    current.append(draw_curr)
+    lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text, draw_volt, draw_curr, state])
     csv_write(filename)
 
 def protection():
@@ -272,15 +291,16 @@ def relay_control():
     else:   
         GPIO.output(18, GPIO.LOW)            
 
-def build_seconds(past_time, actual_time):
+def build_seconds(actual_time):
+    global past_time
     global seconds
     actual_time = datetime.now()
     deltat = (actual_time - past_time).total_seconds()
     seconds += deltat
     past_time = actual_time
     
-def control_temperatura():
-    control = 1.0
+def control_temperature():
+    controlc = 0
     if control == True:
         controlc = pid(tavg.num)
     if float(cont_temp) < tref.num:
@@ -290,19 +310,17 @@ def control_temperatura():
     Heater1.apply_voltage_current(1,30,round(err*5,2))
     Heater2.apply_voltage_current(1,30,round(err*5,2))
 
-past_time = datetime.now()
 
-state = States.Idle
-EOD = 2.5
-EOC = 0.2 
 
 class misc:
     def __init__(self, num, text, data):
         self.num = num
         self.text = text
         self.data = data
-        
 
+state = States.Idle
+EOD = 3.0
+EOC = 0.2 
 t1 = misc(0,"",[])
 t2 = misc(0,"",[])
 t3 = misc(0,"",[])
@@ -310,21 +328,32 @@ t4 = misc(0,"",[])
 tavg = misc(0,"",[])
 tref = misc(0,"",[])
 times = misc(0,"",[])
-
-
-    
+voltage = []
+current = []
+drawing_voltage = 0
+drawing_current = 0
+seconds = 0
+past_time = datetime.now()
 
 while on:
     if timer_flag == 1:
         timer_flag = 0
-        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref)
+        # ~ print("sec = ", seconds)
+        # ~ print("times = ", times.num)
+        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, drawing_voltage, drawing_current)
+        drawing_voltage = 0
+        drawing_current = 0
         protection()
         relay_control()
-        build_seconds(past_time, datetime.now())
-        control_temperatura()
+        build_seconds(datetime.now())
+        control_temperature()
         state_machine(States, EOD, EOC)
+        if state == 2: #Charge
+            drawing_voltage, drawing_current, _ = Source.measure_all(1)
+        else: #Discharge or standby
+            drawing_voltage, drawing_current = Load.measure_all()
         drawnow(temp_figure)
-        # past_time = actual_time
+        # ~ print("flag= ", timer_flag)
 
 GPIO.cleanup() 
 
