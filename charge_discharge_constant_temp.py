@@ -173,24 +173,28 @@ def csv_write(filename):
 
 def temp_figure():
     ax1 = plt.subplot(411)
-    plt.plot(times.data,tavg.data)
+    ax1.set_ylim(-15,70)
+    plt.plot(times.data[-720:],tavg.data[-720:])
     ax1.set_title("Average Temperature")
     ax1.set_ylabel("Degrees C")
     ax2 = plt.subplot(412, sharex=ax1)
-    plt.plot(times.data[-750:],t1.data[-750:], label = "T1")
-    plt.plot(times.data[-750:],t2.data[-750:], label = "T2")
-    plt.plot(times.data[-750:],t3.data[-750:], label = "T3")
-    plt.plot(times.data[-750:],t4.data[-750:], label = "T4")
+    ax2.set_ylim(-15,70)
+    plt.plot(times.data[-720:],t1.data[-720:], label = "T1")
+    plt.plot(times.data[-720:],t2.data[-720:], label = "T2")
+    plt.plot(times.data[-720:],t3.data[-720:], label = "T3")
+    plt.plot(times.data[-720:],t4.data[-720:], label = "T4")
     plt.setp(ax2.get_xticklabels(),visible=False)
     ax2.set_title("Sensor Temperature")
     ax2.set_ylabel("Degrees C")
     ax2.legend()
     ax3 = plt.subplot(413)
-    plt.plot(times.data, voltage)
+    ax3.set_ylim(0,5)
+    plt.plot(times.data[-720:], voltage[-720:])
     ax3.set_title("Battery Voltage")
     ax3.set_ylabel("Volts")
     ax4 = plt.subplot(414)
-    plt.plot(times.data, current)
+    ax4.set_ylim(0,5)
+    plt.plot(times.data[-720:], current[-720:])
     ax4.set_title("Battery Current")
     ax4.set_ylabel("Amps")
     
@@ -223,6 +227,8 @@ class States:
     DC_Res = 4
 
 statelist = [States.Charge, States.Discharge]
+L = len(statelist)
+
 
 firstCycle = True
 
@@ -230,37 +236,51 @@ def state_machine(States, EOD, EOC):
     global start
     global state
     global firstCycle
-    # ~ print(start,state)
-    match state:
-        case States.Idle:
-            if start == True:
-                state = States.Charge
-        case States.Wait:
-            time.sleep(10)
-            state = States.Idle
-        case States.Charge:
-            Source.apply_voltage_current(1,4.2,2)
-            # ~ Source.toggle_4w()
-            Source.turn_on_channel(1)
-            if firstCycle == True:
-                time.sleep(3)
-                firstCycle = False
-            vmeas,cmeas, _ = Source.measure_all(1)
-            if cmeas < EOC:
-                state = States.Wait
-                Source.turn_off_channel(1)
-            # ~ state=States.wait
-        case States.Discharge:
-            Load.set_current(2)
-            Load.turn_on_load()
-            # vmeas,cmeas, _ = Load.measure_all()
-            vmeas,cmeas = Load.measure_all()
-            if vmeas < EOD:
-                state = States.Wait
-                Load.turn_off_load()
-                start = False
-
-
+    global cycles, index
+    
+    if index < len(statelist):
+        # ~ i=0
+        
+        # ~ print(start,state)
+        match state:
+        
+            case States.Idle:
+                #if start == True:
+                    #state = States.Charge
+                state = statelist[index]
+                    
+            case States.Wait:
+                # ~ for i in range(L):
+                    # ~ state=statelist[i]
+                    # ~ i=i+1
+                time.sleep(10)
+                state = States.Idle
+                
+            case States.Charge:
+                Source.apply_voltage_current(1,4.2,2)
+                # ~ Source.toggle_4w()
+                Source.turn_on_channel(1)
+                drawing_voltage, drawing_current, _ = Source.measure_all(1)
+                if firstCycle == True:
+                    time.sleep(3)
+                    firstCycle = False
+                vmeas,cmeas, _ = Source.measure_all(1)
+                if cmeas < EOC:
+                    state = States.Wait
+                    Source.turn_off_channel(1)
+                    index += 1
+                    
+            case States.Discharge:
+                Load.set_current(2)
+                Load.turn_on_load()
+                # vmeas,cmeas, _ = Load.measure_all()
+                vmeas,cmeas = Load.measure_all()
+                drawing_voltage, drawing_current = Load.measure_all()
+                if vmeas < EOD:
+                    state = States.Wait
+                    Load.turn_off_load()
+                    #start = False
+                    index += 1
 
 def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
     times.num = seconds / 60
@@ -328,6 +348,8 @@ class misc:
         self.data = data
 
 state = States.Idle
+cycles = 0
+index = 0
 EOD = 3.0
 EOC = 0.2 
 t1 = misc(0,"",[])
@@ -356,8 +378,9 @@ while on:
         relay_control()
         build_seconds(datetime.now())
         control_temperature()
-        state_machine(States, EOD, EOC)
-        if state == 2: #Charge
+        if start == True:
+            state_machine(States, EOD, EOC)
+        if state == States.Charge: #Charge
             drawing_voltage, drawing_current, _ = Source.measure_all(1)
         else: #Discharge or standby
             drawing_voltage, drawing_current = Load.measure_all()
