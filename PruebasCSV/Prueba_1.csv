@@ -1,4 +1,9 @@
-Prueba #1 con 4.2V y 2A
+Test #1
+Voltage:
 4.2
+Charging Current:
 2.0
+Number of cycles:
 3
+List of states (according the designation in de code):
+2,3,5

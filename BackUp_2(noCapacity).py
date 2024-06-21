@@ -15,14 +15,14 @@ from drawnow import drawnow
 from simple_pid import PID
 import csv
 
-deltat = 2.0
+deltat = 2.5
 statelist=[]
 start = False   
 temp = 0
 control = False
 cont_temp = 0.0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
-lista = [] #csv
+lista = [] #Para guardar en csv
 
 # %%% Initialize GPIO %%%
 GPIO.setwarnings(False)
@@ -113,10 +113,6 @@ def my_callback(inp):
         case "charge":
             state = States.Charge
             print("Charging the battery")
-        case "dc_res":
-            cycles, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
-            state = States.DC_Res
-            print("Aplying DC Resistance")
         case "discharge":
             state = States.Discharge
             print("Discharging the battery")
@@ -129,8 +125,8 @@ def my_callback(inp):
             state = States.Idle
             print("Stopping the state machine")
         case "start":
-            cycles, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
-            if charging_voltage != 0 and charging_current != 0:
+            iter_max, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
+            if charging_voltage != 0 and charging_current != 0 and iter_max != 0:
                 start = True
                 print("Starting the state machine")
             else:
@@ -146,6 +142,7 @@ def my_callback(inp):
             cont_temp += 10
             pid.setpoint = cont_temp
             print(f"Temperatura Actual: {cont_temp}") 
+    # ~ return iter_max, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist
         
 
     
@@ -165,34 +162,40 @@ def measure_temp(channel):
 base = "/home/delta/tvce_data/"
 filename = base + "temp_measurements_" + file_date + ".csv"
 
-def csv_write(filename):
-    global lista
-    with open(filename, "w+", newline="") as file:
-        write = csv.writer(file)
-        write.writerows(lista)
+# ~ def csv_write(filename):
+    # ~ global lista
+    # ~ with open(filename, "w+", newline="") as file:
+        # ~ write = csv.writer(file)
+        # ~ write.writerows(lista)
 
 def temp_figure():
-    #Temperature graph
-    ax1 = plt.subplot(211)
+    ax1 = plt.subplot(411)
     ax1.set_ylim(-15,70)
     plt.plot(times.data[-720:],tavg.data[-720:])
     ax1.set_title("Average Temperature")
-    ax1.set_ylabel("Temperature (dC)")
-    
-    
-    #Battery graph
-    ax2 = plt.subplot(212, sharex=ax1)
-    ax2.set_ylim(0,5)
-    plt.plot(times.data[-720:], capacity[-720:], label = "Capacity")
-    plt.plot(times.data[-720:], voltage[-720:], label = "Voltage")
-    plt.plot(times.data[-720:], current[-720:], label = "Current")
+    ax1.set_ylabel("Degrees C")
+    ax2 = plt.subplot(412, sharex=ax1)
+    ax2.set_ylim(-15,70)
+    plt.plot(times.data[-720:],t1.data[-720:], label = "T1")
+    plt.plot(times.data[-720:],t2.data[-720:], label = "T2")
+    plt.plot(times.data[-720:],t3.data[-720:], label = "T3")
+    plt.plot(times.data[-720:],t4.data[-720:], label = "T4")
     plt.setp(ax2.get_xticklabels(),visible=False)
-    ax2.set_title("Battery Characteristics")
-    ax2.set_ylabel("Current (A) | Voltage (V) | Capacity (Ah)")
+    ax2.set_title("Sensor Temperature")
+    ax2.set_ylabel("Degrees C")
     ax2.legend()
-
+    ax3 = plt.subplot(413)
+    ax3.set_ylim(0,5)
+    plt.plot(times.data[-720:], voltage[-720:])
+    ax3.set_title("Battery Voltage")
+    ax3.set_ylabel("Volts")
+    ax4 = plt.subplot(414)
+    ax4.set_ylim(0,5)
+    plt.plot(times.data[-720:], current[-720:])
+    ax4.set_title("Battery Current")
+    ax4.set_ylabel("Amps")
     
-    fig.text(0.5, 0.001, "State: {}".format(state), ha='center')
+    fig.text(0.5, 0.01, "State: {}".format(state), ha='center')
     plt.tight_layout()
 
 #Interrupt Service Routine
@@ -201,27 +204,25 @@ def temp_figure():
 def ISR():
     global timer_flag
     global deltat
-    t = threading.Timer(deltat, ISR) #ISR execute every 1 s by threading
+    t = threading.Timer(deltat, ISR) #ISR se ejecuta cada 1 s mediante threading
     t.start()
-    timer_flag = 1 
+    timer_flag = 1 #Al iniciar el hilo, el timer_flag pasa a ser 1
 
 
 
 t = threading.Timer(deltat, ISR)
 t.start()
 plt.ion()
-fig = plt.figure(figsize=(8, 9.8))
+fig = plt.figure(figsize=(6.4, 9.6))
 
 def state_machine(statelist):
     global States
     global start
     global state
-    global firstCycle, secondCycle
-    global cycles, index, DC_Res_cont
-    global tdc1, tdc2, tdc3, dc_state, dc_wait, deltat
+    global firstCycle
+    global cycles, index
     global cmeas, vmeas, capmeas
-    global v1,v2,v3,v4,c1,c2,c3,c4
-    global charging_voltage, charging_current, discharging_current, EOD, EOC, wait_time
+    global charging_voltage, charging_current, discharging_current, iter_max, EOD, EOC, wait_time
     match state:
         case States.Idle:
             Source.turn_off_channel(1)
@@ -229,20 +230,15 @@ def state_machine(statelist):
             vmeas,cmeas = Load.measure_all()
             index = 0
             if start == True:
-                state = statelist[index]  
-            if cycles == 0:
-                start = False
+                state = statelist[index]                                    
         case States.Wait:
+            # ~ print("Entro a wait")
             Source.turn_off_channel(1)
             Load.turn_off_load()
             vmeas,cmeas = Load.measure_all()
             time.sleep(wait_time)
-            dc_state = DC_states.Discharge_1
             index += 1
             state = statelist[index]
-            firstCycle = True
-            if state == 0:
-                cycles -= 1
         case States.Charge:
             Source.apply_voltage_current(1,charging_voltage, charging_current)
             Source.turn_on_channel(1)
@@ -250,6 +246,9 @@ def state_machine(statelist):
                 time.sleep(10)
                 firstCycle = False
             vmeas,cmeas, _ = Source.measure_all(1)
+            # ~ capmeas = np.trapz(current, dx=deltat)
+            # ~ capmeas = (capmeas/3600)*1000  
+            print(f"Capacity of the battery:{capmeas}")         
             if cmeas < EOC:
                 state = States.Wait
         case States.Discharge:
@@ -258,88 +257,20 @@ def state_machine(statelist):
             vmeas,cmeas = Load.measure_all()
             if vmeas < EOD:
                 state = States.Wait
-        case States.DC_Res:
-            match dc_state:
-                case DC_states.Discharge_1:
-                    vmeas,cmeas = Load.measure_all()
-                    Load.set_current(nominal_capacity) # 1 * Capacity of the battery
-                    Load.turn_on_load()
-                    dc_wait -= 1
-                    if dc_wait == 0:
-                        dc_state = DC_states.Discharge_2
-                        dc_wait = 108 / deltat
-                case DC_states.Discharge_2:
-                    vmeas,cmeas = Load.measure_all()                    
-                    Load.set_current(nominal_capacity*0.75) # 0.75 * Capacity of the battery
-                    Load.turn_on_load()
-                    dc_wait -= 1
-                    if dc_wait == 0:
-                        v1,c1 = vmeas,cmeas
-                        dc_state = DC_states.Wait_1
-                        dc_wait = 40/deltat
-                case DC_states.Charge:
-                    vmeas,cmeas, _ = Source.measure_all(1)
-                    Source.apply_voltage_current(1,charging_voltage, nominal_capacity*0.75)
-                    Source.turn_on_channel(1)
-                    if firstCycle == True:
-                        time.sleep(10)
-                        firstCycle = False
-                    dc_wait -= 1
-                    if dc_wait == 0:
-                        v3,c3 = vmeas,cmeas
-                        dc_state = DC_states.Wait_2
-                        dc_wait = 40/deltat
-                case DC_states.Wait_1:
-                    vmeas,cmeas = Load.measure_all()
-                    Source.turn_off_channel(1)
-                    Load.turn_off_load()
-                    dc_wait -= 1
-                    if dc_wait == 0:
-                        v2,c2 = vmeas,cmeas
-                        dc_state = DC_states.Charge
-                        dc_wait = 20/deltat                        
-                case DC_states.Wait_2:
-                    vmeas,cmeas = Load.measure_all()
-                    Source.turn_off_channel(1)
-                    Load.turn_off_load()
-                    dc_wait -= 1
-                    if dc_wait == 0:
-                        v4,c4 = vmeas,cmeas
-                        dc_state = DC_states.Charge
-                        DCIR_discharge = ((v2-v1)/c1)*1000 #miliohms
-                        DCIR_charge = ((v3-v4)/c3)*1000
-                        print("")
-                        print(f"The DCIR for charge is: {DCIR_charge} miliohms")
-                        print("")
-                        print(f"The DCIR for discharge is: {DCIR_discharge} miliohms")
-                        state = States.Wait 
-                    
-                
-def relay_sense_and_power(state, dc_state):
-    global DC_states
-    global States
-    match state:
-        case States.Charge:
-            GPIO.output(17, GPIO.LOW)
-            GPIO.output(27, GPIO.LOW)
-        case (States.Idle | States.Discharge | States.Wait):
-            GPIO.output(17, GPIO.HIGH)
-            GPIO.output(27, GPIO.HIGH)
-        case States.DC_Res:
-            match dc_state:
-                case DC_states.Charge:
-                    GPIO.output(17, GPIO.LOW)
-                    GPIO.output(27, GPIO.LOW)
-                case (DC_states.Discharge_1 | DC_states.Discharge_1 | DC_states.Wait_1 | DC_states.Wait_2):
-                    GPIO.output(17, GPIO.HIGH)
-                    GPIO.output(27, GPIO.HIGH)
         
-                
-            
-            
+                    
+def relay_sense_and_power(state):   
+	global States
+	match state:
+		case States.Charge:
+			GPIO.output(17, GPIO.LOW)
+			GPIO.output(27, GPIO.LOW)
+		case (States.Idle | States.Discharge | States.DC_Res):
+			GPIO.output(17, GPIO.HIGH)       
+			GPIO.output(27, GPIO.HIGH)
     
 
-def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
+def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr, draw_cap):
     times.num = seconds / 60
     times.text = "{:05.3f}".format(times.num)
     times.data.append(times.num)
@@ -363,13 +294,9 @@ def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
     tref.data.append(tref.num)
     voltage.append(draw_volt)
     current.append(draw_curr)
-    
-    capmeas = np.trapz(current, dx=deltat)
-    capmeas = (capmeas/3600)
-            
-    capacity.append(capmeas)
-    lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text, draw_volt, draw_curr,capmeas, state])
-    csv_write(filename)
+    capacity.append(draw_cap)
+    lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text, draw_volt, draw_curr,draw_cap, state])
+    #csv_write(filename)
 
 def protection():
     if (t1.num >= 70) | (t2.num >= 70) | (t3.num >= 70) |  (t4.num >= 70):
@@ -415,13 +342,6 @@ class KeyboardThread(threading.Thread):
     def run(self):
         while True:
             self.input_cbk(input()) #waits to get input + Return
-     
-class DC_states:
-    Discharge_1 = 0
-    Discharge_2 = 1
-    Charge = 2
-    Wait_1 = 3     #Measure V2 and I2
-    Wait_2 = 4     #Measure V4 and I4
             
 class States:
     Idle = 0
@@ -443,24 +363,6 @@ class misc:
 
 cycles = 0
 index = 0 
-iter_max = 0
-
-#According to ISO 12405
-dc_state = DC_states.Discharge_1
-dc_wait = 18 / deltat
-v1 = 0
-v2 = 0
-v3 = 0
-v4 = 0
-c1 = 0
-c2 = 0
-c3 = 0
-c4 = 0
-# ~ tdc1 = 9 #18 seconds, but the sistem takes data every 2 seconds
-# ~ tdc2 = 51 #102 seconds
-# ~ tdc3 = 10 #20 seconds
-# ~ dc_wait_time = 10
-
 t1 = misc(0,"",[])
 t2 = misc(0,"",[])
 t3 = misc(0,"",[])
@@ -471,7 +373,6 @@ times = misc(0,"",[])
 voltage = []
 current = []
 capacity= []
-nominal_capacity = 3.5 #Ah
 seconds = 0
 cmeas = 0
 vmeas = 0
@@ -486,17 +387,17 @@ kthread = KeyboardThread(my_callback)
 state = States.Idle
 past_time = datetime.now()
 
-fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas)
+fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, capmeas)
 
 ######################## Programa Principal ########################
 timer_flag = 0
 while True:
     if timer_flag == 1:
         timer_flag = 0
-        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas)
+        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas,capmeas)
         protection()
         relay_control()
-        relay_sense_and_power(state, dc_state)
+        relay_sense_and_power(state)
         build_seconds(datetime.now())
         control_temperature()
         state_machine(statelist)

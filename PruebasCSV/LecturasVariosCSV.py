@@ -1,33 +1,38 @@
-import csv
+import pandas as pd
 
-def get_voltage_and_current(file_path):
-    with open(file_path, newline='') as f:
-        data = csv.reader(f, delimiter=',')
-        next(data)  # Saltar el titulo de la prueba
-        voltage_row = next(data)
-        current_row = next(data)
-        cycles_row = next(data)
+def get_values(data_path):
+        global statelist
         
+        test_choice = int(input("Choose the number of the test: ").strip())
+        test_choice -= 1
+             
+        data = ["test_number", "cycles","wait_time", "cv", "cc", "dc", "eod", "eoc"]
+        states = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10"]
+        
+        data_test = pd.read_csv(data_path, usecols = data)
+        states_test = pd.read_csv(data_path,usecols = states)
+        
+        wait_time = data_test.loc[test_choice, "wait_time"]
+        wait_time = wait_time*1 #Tiempo en segundos
+        iter_max = data_test.loc[test_choice, "cycles"]
+        charging_voltage = data_test.loc[test_choice,"cv"]
+        charging_current = data_test.loc[test_choice,"cc"]
+        discharging_current = data_test.loc[test_choice,"dc"]
+        EOD = data_test.loc[test_choice,"eod"]
+        EOC = data_test.loc[test_choice,"eoc"]
+        statelist = (states_test.iloc[test_choice]).values.tolist()
 
-        # Convierte los valores eh flotantes
-        voltage = float(voltage_row[0])
-        current = float(current_row[0])
-        cycles = int(cycles_row[0])
-        return voltage, current, cycles
+        
+        
+        print(" ")
+        print("Number of cycles: ", iter_max)
+        print("Wait time between cycles: ", wait_time)
+        print("Charging Voltage:", charging_voltage)
+        print("Charging Current:", charging_current)
+        print("Discharging Current:", discharging_current)
+        print("End of charge:", EOC)
+        print("End of discharge:", EOD)
+        print("State list:\n", statelist)
+        print(" ")
+        return iter_max, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist
 
-def main():
-    
-    test_choice = input("Choose the number of the test: ").strip()
-    file_name = f"Prueba_{test_choice}.csv"
-
-    try:
-        Voltage, Current, cycles = get_voltage_and_current(file_name)
-        print(f"Voltage: {Voltage} V, Current: {Current} A, Number of cycles: {cycles}")
-        print('')
-    except FileNotFoundError:
-        print(f"Test number {test_choice} was not found.")
-    except Exception as e:
-        print(f"There was a mistake in the test {test_choice}: {e}")
-
-
-main()
