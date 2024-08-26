@@ -19,10 +19,12 @@ deltat = 2.0
 statelist=[]
 start = False   
 temp = 0
+cycles = 1
 control = False
 cont_temp = 0.0
 file_date = datetime.now().strftime("%d_%m_%Y_%H_%M")
 lista = [] #csv
+EOI = True
 
 # %%% Initialize GPIO %%%
 GPIO.setwarnings(False)
@@ -107,12 +109,17 @@ def my_callback(inp):
     global cont_temp
     global statelist
     global charging_voltage, charging_current, discharging_current, iter_max, wait_time, EOD, EOC
+    global index
+    global pulse_cycle, pulse_wait
 
     
     match inp:
         case "charge":
             state = States.Charge
             print("Charging the battery")
+        case "next state":
+            state = States.Wait
+            print("The next state is:",statelist[index+1])            
         case "dc_res":
             cycles, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
             state = States.DC_Res
@@ -120,6 +127,9 @@ def my_callback(inp):
         case "discharge":
             state = States.Discharge
             print("Discharging the battery")
+        case "dispulse":
+            state = States.Dis_Pulses
+            print("Discharging pulses")
         case "off":
             apagar_fuentes()
             control = False
@@ -182,7 +192,7 @@ def temp_figure():
     
     #Battery graph
     ax2 = plt.subplot(212, sharex=ax1)
-    ax2.set_ylim(0,5)
+    ax2.set_ylim(0,7)
     plt.plot(times.data[-720:], capacity[-720:], label = "Capacity")
     plt.plot(times.data[-720:], voltage[-720:], label = "Voltage")
     plt.plot(times.data[-720:], current[-720:], label = "Current")
@@ -222,42 +232,91 @@ def state_machine(statelist):
     global cmeas, vmeas, capmeas
     global v1,v2,v3,v4,c1,c2,c3,c4
     global charging_voltage, charging_current, discharging_current, EOD, EOC, wait_time
+    global pulse_cycle, pulse_wait, EOI
+    
     match state:
+        
         case States.Idle:
             Source.turn_off_channel(1)
             Load.turn_off_load()
             vmeas,cmeas = Load.measure_all()
             index = 0
-            if start == True:
-                state = statelist[index]  
-            if cycles == 0:
-                start = False
+            EOI = True
+            print("ciclos", cycles)
+            if start == True and cycles != 0 and EOI == True:
+                cycles -= 1
+                state = statelist[index]
+                print("Estado de ciclo", state)
+                EOI = False
+                
+            
+            if start == True and EOI == False:
+                pulse_wait = PULSE_TIME
+                EoP = False
+                if statelist[index] == States.Dis_Pulses and not EoP:
+                    if vmeas > EOD:
+                        state = States.Dis_Pulses
+                    else:
+                        EoP = True
+                else:
+                    index += 1
+                    state = statelist[index]
+                
+
+                
         case States.Wait:
             Source.turn_off_channel(1)
             Load.turn_off_load()
             vmeas,cmeas = Load.measure_all()
             time.sleep(wait_time)
             dc_state = DC_states.Discharge_1
-            index += 1
-            state = statelist[index]
             firstCycle = True
-            if state == 0:
-                cycles -= 1
+            
+            
+                
         case States.Charge:
-            Source.apply_voltage_current(1,charging_voltage, charging_current)
-            Source.turn_on_channel(1)
-            if firstCycle == True:
-                time.sleep(10)
-                firstCycle = False
             vmeas,cmeas, _ = Source.measure_all(1)
-            if cmeas < EOC:
+            if cmeas < EOC and firstCycle == False:
                 state = States.Wait
+            if firstCycle == True:
+                Source.apply_voltage_current(1,charging_voltage, charging_current)
+                Source.turn_on_channel(1)
+                firstCycle = False
+
+                
         case States.Discharge:
-            Load.set_current(discharging_current)
-            Load.turn_on_load()
             vmeas,cmeas = Load.measure_all()
-            if vmeas < EOD:
+            if vmeas < EOD and firstCycle == False:
                 state = States.Wait
+            if firstCycle == True:
+                Load.set_current(discharging_current)
+                Load.turn_on_load()
+                firstCycle = False
+
+        
+        case States.Dis_Pulses:
+            vmeas,cmeas = Load.measure_all()
+            if pulse_wait == PULSE_TIME:
+                Load.set_current(nominal_capacity*1.5)
+                Load.turn_on_load()
+            elif pulse_wait == 0:
+                Load.turn_off_load()
+            elif pulse_wait == -1:
+                v1 = vmeas
+                print("v1 = ", v1,'\n')
+            elif pulse_wait == -2:
+                pulse_wait = 0
+                if ((vmeas-v1)/vmeas) < (0.01/100):
+                    state = States.Idle
+                    print("vmeas = ", vmeas,'\n')
+                    print("v1 = ", v1,'\n')
+            pulse_wait -= 1
+
+                    
+                    
+                
+                
+        
         case States.DC_Res:
             match dc_state:
                 case DC_states.Discharge_1:
@@ -322,7 +381,7 @@ def relay_sense_and_power(state, dc_state):
         case States.Charge:
             GPIO.output(17, GPIO.LOW)
             GPIO.output(27, GPIO.LOW)
-        case (States.Idle | States.Discharge | States.Wait):
+        case (States.Idle | States.Discharge | States.Wait | States.Dis_Pulses):
             GPIO.output(17, GPIO.HIGH)
             GPIO.output(27, GPIO.HIGH)
         case States.DC_Res:
@@ -429,6 +488,7 @@ class States:
     Charge = 2
     Discharge = 3
     DC_Res = 4
+    Dis_Pulses = 5
 
 class misc:
     def __init__(self, num, text, data):
@@ -441,13 +501,16 @@ class misc:
 ######################## Variables ########################
 
 
-cycles = 0
+
 index = 0 
 iter_max = 0
 
 #According to ISO 12405
 dc_state = DC_states.Discharge_1
 dc_wait = 18 / deltat
+PULSE_TIME = 60
+pulse_wait = PULSE_TIME
+pulse_cycle = 10
 v1 = 0
 v2 = 0
 v3 = 0
@@ -493,6 +556,7 @@ timer_flag = 0
 while True:
     if timer_flag == 1:
         timer_flag = 0
+        
         fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas)
         protection()
         relay_control()
