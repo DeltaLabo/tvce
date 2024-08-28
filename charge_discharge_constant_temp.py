@@ -109,7 +109,7 @@ def my_callback(inp):
     global cont_temp
     global statelist
     global charging_voltage, charging_current, discharging_current, iter_max, wait_time, EOD, EOC
-    global index
+    global index, cycles
     global pulse_cycle, pulse_wait
 
     
@@ -136,6 +136,7 @@ def my_callback(inp):
             print("Turning off peltier drivers")
         case "stop":
             index = 0
+            start = False 
             state = States.Idle
             print("Stopping the state machine")
         case "start":
@@ -244,13 +245,14 @@ def state_machine(statelist):
             EOI = True
             print("ciclos", cycles)
             if start == True and cycles != 0 and EOI == True:
+                print("Cicló")
                 cycles -= 1
                 state = statelist[index]
                 print("Estado de ciclo", state)
                 EOI = False
                 
             
-            if start == True and EOI == False:
+            if start == True and EOI == True:
                 pulse_wait = PULSE_TIME
                 EoP = False
                 if statelist[index] == States.Dis_Pulses and not EoP:
@@ -271,6 +273,8 @@ def state_machine(statelist):
             time.sleep(wait_time)
             dc_state = DC_states.Discharge_1
             firstCycle = True
+            index += 1
+            state = statelist[index]
             
             
                 
