@@ -117,6 +117,9 @@ def my_callback(inp):
         case "charge":
             state = States.Charge
             print("Charging the battery")
+        case "wait":
+            state = States.Wait
+            print("The State is in Wait")
         case "next state":
             state = States.Wait
             print("The next state is:",statelist[index+1])            
@@ -182,11 +185,13 @@ def csv_write(filename):
         write = csv.writer(file)
         write.writerows(lista)
 
+datapoints = 1000
+
 def temp_figure():
     #Temperature graph
     ax1 = plt.subplot(211)
     ax1.set_ylim(-15,70)
-    plt.plot(times.data[-720:],tavg.data[-720:])
+    plt.plot(times.data[-datapoints:],tavg.data[-datapoints:])
     ax1.set_title("Average Temperature")
     ax1.set_ylabel("Temperature (dC)")
     
@@ -194,9 +199,9 @@ def temp_figure():
     #Battery graph
     ax2 = plt.subplot(212, sharex=ax1)
     ax2.set_ylim(0,7)
-    plt.plot(times.data[-720:], capacity[-720:], label = "Capacity")
-    plt.plot(times.data[-720:], voltage[-720:], label = "Voltage")
-    plt.plot(times.data[-720:], current[-720:], label = "Current")
+    plt.plot(times.data[-datapoints:], capacity[-datapoints:], label = "Capacity")
+    plt.plot(times.data[-datapoints:], voltage[-datapoints:], label = "Voltage")
+    plt.plot(times.data[-datapoints:], current[-datapoints:], label = "Current")
     plt.setp(ax2.get_xticklabels(),visible=False)
     ax2.set_title("Battery Characteristics")
     ax2.set_ylabel("Current (A) | Voltage (V) | Capacity (Ah)")
@@ -227,13 +232,14 @@ def state_machine(statelist):
     global States
     global start
     global state
-    global firstCycle, secondCycle
+    global firstCycle
     global cycles, index, DC_Res_cont
     global tdc1, tdc2, tdc3, dc_state, dc_wait, deltat
-    global cmeas, vmeas, capmeas
+    global cmeas, vmeas, capmeas, capacity, current
     global v1,v2,v3,v4,c1,c2,c3,c4
     global charging_voltage, charging_current, discharging_current, EOD, EOC, wait_time
     global pulse_cycle, pulse_wait, EOI
+    global initialtime
     
     match state:
         
@@ -243,12 +249,12 @@ def state_machine(statelist):
             vmeas,cmeas = Load.measure_all()
             index = 0
             EOI = True
-            print("ciclos", cycles)
+            #print("ciclos", cycles)
             if start == True and cycles != 0 and EOI == True:
-                print("Cicló")
+                #print("Cicló")
                 cycles -= 1
                 state = statelist[index]
-                print("Estado de ciclo", state)
+                #print("Estado de ciclo", state)
                 EOI = False
                 
             
@@ -264,20 +270,18 @@ def state_machine(statelist):
                     index += 1
                     state = statelist[index]
                 
-
-                
         case States.Wait:
             Source.turn_off_channel(1)
             Load.turn_off_load()
             vmeas,cmeas = Load.measure_all()
-            time.sleep(wait_time)
-            dc_state = DC_states.Discharge_1
-            firstCycle = True
-            index += 1
-            state = statelist[index]
+            if firstCycle == False:
+                initialtime = seconds
+                firstCycle = True
+            if (seconds - initialtime) > wait_time:
+                dc_state = DC_states.Discharge_1
+                index += 1
+                state = statelist[index]
             
-            
-                
         case States.Charge:
             vmeas,cmeas, _ = Source.measure_all(1)
             if cmeas < EOC and firstCycle == False:
@@ -300,6 +304,10 @@ def state_machine(statelist):
         
         case States.Dis_Pulses:
             vmeas,cmeas = Load.measure_all()
+            if vmeas < 2:
+                print("Terminaron los pulsos")
+                start = False
+                state = States.Idle
             if pulse_wait == PULSE_TIME:
                 Load.set_current(nominal_capacity*1.5)
                 Load.turn_on_load()
@@ -310,7 +318,7 @@ def state_machine(statelist):
                 print("v1 = ", v1,'\n')
             elif pulse_wait == -2:
                 pulse_wait = 0
-                if ((vmeas-v1)/vmeas) < (0.01/100):
+                if ((vmeas-v1)/vmeas) < (0.005/100):
                     state = States.Idle
                     print("vmeas = ", vmeas,'\n')
                     print("v1 = ", v1,'\n')
@@ -402,7 +410,7 @@ def relay_sense_and_power(state, dc_state):
             
     
 
-def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
+def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr, state):
     times.num = seconds / 60
     times.text = "{:05.3f}".format(times.num)
     times.data.append(times.num)
@@ -424,13 +432,18 @@ def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr):
     tref.num = max31855.reference_temperature
     tref.text = "{:05.2f}".format(tref.num)
     tref.data.append(tref.num)
-    voltage.append(draw_volt)
-    current.append(draw_curr)
     
     capmeas = np.trapz(current, dx=deltat)
     capmeas = (capmeas/3600)
+    if state == States.Wait:
+        current.append(0)
+        capacity.append(0)
+    else:
+        current.append(draw_curr)
+        capacity.append(capmeas)
+    voltage.append(draw_volt)
             
-    capacity.append(capmeas)
+    
     lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text, draw_volt, draw_curr,capmeas, state])
     csv_write(filename)
 
@@ -553,7 +566,7 @@ kthread = KeyboardThread(my_callback)
 state = States.Idle
 past_time = datetime.now()
 
-fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas)
+fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, state)
 
 ######################## Programa Principal ########################
 timer_flag = 0
@@ -561,7 +574,7 @@ while True:
     if timer_flag == 1:
         timer_flag = 0
         
-        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas)
+        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, state)
         protection()
         relay_control()
         relay_sense_and_power(state, dc_state)
