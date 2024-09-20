@@ -115,6 +115,7 @@ def my_callback(inp):
     
     match inp:
         case "charge":
+            cycles, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
             state = States.Charge
             print("Charging the battery")
         case "wait":
@@ -128,6 +129,7 @@ def my_callback(inp):
             state = States.DC_Res
             print("Aplying DC Resistance")
         case "discharge":
+            cycles, wait_time, charging_voltage, charging_current, discharging_current, EOC, EOD, statelist = LecturasVariosCSV.get_values("test_config.csv")
             state = States.Discharge
             print("Discharging the battery")
         case "dispulse":
@@ -199,9 +201,12 @@ def temp_figure():
     #Battery graph
     ax2 = plt.subplot(212, sharex=ax1)
     ax2.set_ylim(0,7)
-    plt.plot(times.data[-datapoints:], capacity[-datapoints:], label = "Capacity")
     plt.plot(times.data[-datapoints:], voltage[-datapoints:], label = "Voltage")
     plt.plot(times.data[-datapoints:], current[-datapoints:], label = "Current")
+    if len(times.data) == len(capacity):
+        plt.plot(times.data[-datapoints:], capacity[-datapoints:], label = "Capacity")
+    else:
+        print(f"Error: Las dimensiones no coinciden. Times: {len(times.data)}, capacity {len(capacity)}")
     plt.setp(ax2.get_xticklabels(),visible=False)
     ax2.set_title("Battery Characteristics")
     ax2.set_ylabel("Current (A) | Voltage (V) | Capacity (Ah)")
@@ -217,7 +222,7 @@ def temp_figure():
 def ISR():
     global timer_flag
     global deltat
-    t = threading.Timer(deltat, ISR) #ISR execute every 1 s by threading
+    t = threading.Timer(deltat, ISR) #ISR execute every 2 s by threading
     t.start()
     timer_flag = 1 
 
@@ -410,7 +415,8 @@ def relay_sense_and_power(state, dc_state):
             
     
 
-def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr, state):
+def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt,draw_curr,state,first):
+    global capmeas, current, voltage, capacity
     times.num = seconds / 60
     times.text = "{:05.3f}".format(times.num)
     times.data.append(times.num)
@@ -433,16 +439,22 @@ def fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,draw_volt, draw_curr, 
     tref.text = "{:05.2f}".format(tref.num)
     tref.data.append(tref.num)
     
-    capmeas = np.trapz(current, dx=deltat)
-    capmeas = (capmeas/3600)
+    if first == False:
+        prev_curr = current[-1]
+    else:
+        prev_curr = 0
+    
     if state == States.Wait:
         current.append(0)
         capacity.append(0)
+        capmeas = 0
     else:
         current.append(draw_curr)
+        capmeas += ((deltat/2) * (prev_curr + draw_curr))/3600
         capacity.append(capmeas)
+        
     voltage.append(draw_volt)
-            
+
     
     lista.append([times.text, t1.text, t2.text, t3.text, t4.text, tavg.text, tref.text, draw_volt, draw_curr,capmeas, state])
     csv_write(filename)
@@ -491,7 +503,8 @@ class KeyboardThread(threading.Thread):
     def run(self):
         while True:
             self.input_cbk(input()) #waits to get input + Return
-     
+
+
 class DC_states:
     Discharge_1 = 0
     Discharge_2 = 1
@@ -566,7 +579,8 @@ kthread = KeyboardThread(my_callback)
 state = States.Idle
 past_time = datetime.now()
 
-fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, state)
+
+fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref,vmeas,cmeas,state,True)
 
 ######################## Programa Principal ########################
 timer_flag = 0
@@ -574,7 +588,7 @@ while True:
     if timer_flag == 1:
         timer_flag = 0
         
-        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, state)
+        fill_measure_data(times,seconds,t1,t2,t3,t4,tavg,tref, vmeas, cmeas, state, False)
         protection()
         relay_control()
         relay_sense_and_power(state, dc_state)
@@ -582,7 +596,8 @@ while True:
         control_temperature()
         state_machine(statelist)
         drawnow(temp_figure)
-        # ~ print(timer_flag)
+        
+        
 
 GPIO.cleanup() 
 
