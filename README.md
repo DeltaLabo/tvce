@@ -16,6 +16,8 @@ Temperature is managed using an array of four thermocouples, connected through a
 
 ![Reles & termocuples](/Assets/IMG_9189.jpeg)
 
+![Reles & termocuples](/Assets/Diagrama_reles_TVCE.drawio.png)
+
 ---
 
 This program uses the library `instrument_driver` in order to communicate with the instrumentation. This library is present in this repository as a git submodule, as such, when you clone the repository for this program, you must do an extra step:
@@ -30,6 +32,6 @@ If there is a change pushed to the library repository and you wish to update the
 
 > `git submodule update --remote`
 
-Any questions regarding **the library** contact Jairo at <jairo.rb8@gmail.com>. 
+Any questions contact Kaleb Granados. kalebgranac13@gmail.com
 
 
