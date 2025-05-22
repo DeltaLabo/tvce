@@ -18,16 +18,6 @@ Temperature is managed using an array of four thermocouples, connected through a
 
 ---
 
-## How to Insert Images in the README
-
-You can add images anywhere in the README using this Markdown syntax:
-
-```markdown
-![Alt text describing the image](relative-or-absolute-path-to-image)
-
-
-
-
 This program uses the library `instrument_driver` in order to communicate with the instrumentation. This library is present in this repository as a git submodule, as such, when you clone the repository for this program, you must do an extra step:
 
 > `git clone https://github.com/DeltaLabo/tvce.git`
