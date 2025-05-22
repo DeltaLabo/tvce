@@ -1,7 +1,7 @@
 
 # TVCE - Battery Characterizer
-![TVCE System](\Assets\IMG_9187.jpeg)
-![Cube of TVCE](\Assets\IMG_9188.jpeg)
+![TVCE System](/Assets/IMG_9187.jpeg)
+![Cube of TVCE](/Assets/IMG_9188.jpeg)
 
 TVCE is a battery characterization system designed for INR18650 type batteries, capable of performing both charging and discharging cycles. This system is composed of two main subsystems:
 
@@ -14,7 +14,7 @@ All devices are controlled by a **Raspberry Pi 4**. Communication with the Rigol
 
 Temperature is managed using an array of four thermocouples, connected through a custom driver that processes the four data sets internally by averaging the temperature readings. Temperature regulation is achieved through Peltier cells that heat or cool heat sinks. Power delivery to the Peltier cells is controlled by an array of relays, allowing precise management of the temperature control system.
 
-![Reles & termocuples](\Assets\IMG_9189.jpeg)
+![Reles & termocuples](/Assets/IMG_9189.jpeg)
 
 ---
 
