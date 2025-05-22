@@ -1,3 +1,33 @@
+
+# TVCE - Battery Characterizer
+![TVCE System](\Assets\IMG_9187.jpeg)
+![Cube of TVCE](\Assets\IMG_9188.jpeg)
+
+TVCE is a battery characterization system designed for INR18650 type batteries, capable of performing both charging and discharging cycles. This system is composed of two main subsystems:
+
+- **Temperature Control Subsystem**: Utilizes two Rigol DP711 DC power supplies to regulate temperature.
+- **Charge and Discharge Subsystem**: Employs a Rigol DL3021 electronic load and a Rigol DP811A DC power supply.
+
+All devices are controlled by a **Raspberry Pi 4**. Communication with the Rigol instruments is done via serial interface using the PySerial library.
+
+## Temperature Control Details
+
+Temperature is managed using an array of four thermocouples, connected through a custom driver that processes the four data sets internally by averaging the temperature readings. Temperature regulation is achieved through Peltier cells that heat or cool heat sinks. Power delivery to the Peltier cells is controlled by an array of relays, allowing precise management of the temperature control system.
+
+![Reles & termocuples](\Assets\IMG_9189.jpeg)
+
+---
+
+## How to Insert Images in the README
+
+You can add images anywhere in the README using this Markdown syntax:
+
+```markdown
+![Alt text describing the image](relative-or-absolute-path-to-image)
+
+
+
+
 This program uses the library `instrument_driver` in order to communicate with the instrumentation. This library is present in this repository as a git submodule, as such, when you clone the repository for this program, you must do an extra step:
 
 > `git clone https://github.com/DeltaLabo/tvce.git`
@@ -11,3 +41,5 @@ If there is a change pushed to the library repository and you wish to update the
 > `git submodule update --remote`
 
 Any questions regarding **the library** contact Jairo at <jairo.rb8@gmail.com>. 
+
+
